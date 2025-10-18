@@ -1,0 +1,10 @@
+{
+  "universal_keywords": ["engineering manager"],
+  "companies": [
+    {
+      "name": "Mux",
+      "job_board_url": "https://www.mux.com/jobs",
+      "keywords": ["gtm engineer"]
+    }
+  ]
+}

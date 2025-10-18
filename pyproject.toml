@@ -1,0 +1,14 @@
+[project]
+name = "jobscraper"
+version = "0.1.0"
+description = "CLI application to scrape company job boards for matching positions"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.14.2",
+    "playwright>=1.55.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+]
+
+[project.scripts]
+jobscraper = "main:main"

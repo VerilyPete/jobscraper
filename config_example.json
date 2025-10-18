@@ -1,0 +1,12 @@
+{
+  "universal_keywords": ["python", "remote", "senior"],
+  "companies": [
+    {
+      "name": "Example Company",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["backend", "api"]
+    }
+  ]
+}
+
+
