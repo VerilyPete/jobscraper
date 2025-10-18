@@ -136,3 +136,155 @@ class TestJobDeduplication:
         # This is a placeholder to document the expected behavior
         assert True  # The actual fix is in scraper.py line 109
 
+
+class TestLocationFilter:
+    """Test flexible location filtering system.
+    
+    Location filters support both 'include' and 'exclude' patterns.
+    """
+    
+    def test_matches_location_pattern_simple(self):
+        """Test simple pattern matching."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, Canada"
+        assert scraper.matches_location_pattern(text, "remote, canada") is True
+        assert scraper.matches_location_pattern(text, "remote, us") is False
+    
+    def test_matches_location_pattern_case_insensitive(self):
+        """Test case-insensitive pattern matching."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - REMOTE, CANADA"
+        assert scraper.matches_location_pattern(text, "remote, canada") is True
+    
+    def test_exclude_filter_matches(self):
+        """Test exclude filter filters out matching jobs."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, Canada"
+        filters = {"exclude": ["remote, canada"]}
+        
+        assert scraper.should_filter_by_location(text, filters) is True
+    
+    def test_exclude_filter_no_match(self):
+        """Test exclude filter keeps non-matching jobs."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, US"
+        filters = {"exclude": ["remote, canada"]}
+        
+        assert scraper.should_filter_by_location(text, filters) is False
+    
+    def test_exclude_filter_multiple_patterns(self):
+        """Test exclude filter with multiple patterns."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        filters = {"exclude": ["remote, canada", "canada only"]}
+        
+        text1 = "Senior Developer - Remote, Canada"
+        assert scraper.should_filter_by_location(text1, filters) is True
+        
+        text2 = "Senior Developer - Canada Only"
+        assert scraper.should_filter_by_location(text2, filters) is True
+        
+        text3 = "Senior Developer - Remote, US"
+        assert scraper.should_filter_by_location(text3, filters) is False
+    
+    def test_include_filter_matches(self):
+        """Test include filter keeps matching jobs."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, US"
+        filters = {"include": ["remote, us"]}
+        
+        assert scraper.should_filter_by_location(text, filters) is False
+    
+    def test_include_filter_no_match(self):
+        """Test include filter filters out non-matching jobs."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, Canada"
+        filters = {"include": ["remote, us"]}
+        
+        assert scraper.should_filter_by_location(text, filters) is True
+    
+    def test_include_filter_multiple_patterns(self):
+        """Test include filter with multiple patterns (OR logic)."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        filters = {"include": ["remote, us", "us and canada"]}
+        
+        text1 = "Senior Developer - Remote, US"
+        assert scraper.should_filter_by_location(text1, filters) is False
+        
+        text2 = "Senior Developer - Remote, US and Canada"
+        assert scraper.should_filter_by_location(text2, filters) is False
+        
+        text3 = "Senior Developer - Remote, Canada"
+        assert scraper.should_filter_by_location(text3, filters) is True
+    
+    def test_include_and_exclude_combined(self):
+        """Test combining include and exclude filters."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        # Include US jobs, but exclude specific states
+        filters = {
+            "include": ["remote, us", "united states"],
+            "exclude": ["california"]
+        }
+        
+        text1 = "Senior Developer - Remote, US"
+        assert scraper.should_filter_by_location(text1, filters) is False  # Keep
+        
+        text2 = "Senior Developer - Remote, US - California"
+        assert scraper.should_filter_by_location(text2, filters) is True  # Filter (excluded)
+        
+        text3 = "Senior Developer - Remote, Canada"
+        assert scraper.should_filter_by_location(text3, filters) is True  # Filter (not included)
+    
+    def test_no_filters(self):
+        """Test that no filters means no filtering."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, Canada"
+        
+        # No filters at all
+        assert scraper.should_filter_by_location(text, None) is False
+        assert scraper.should_filter_by_location(text, {}) is False
+    
+    def test_empty_filter_arrays(self):
+        """Test empty filter arrays."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        text = "Senior Developer - Remote, Canada"
+        filters = {"include": [], "exclude": []}
+        
+        assert scraper.should_filter_by_location(text, filters) is False
+    
+    def test_real_world_vidyard_exclude(self):
+        """Test real-world Vidyard scenario: exclude Canada-only, keep US+Canada."""
+        config = {"universal_keywords": [], "companies": []}
+        scraper = JobScraper(config)
+        
+        filters = {"exclude": ["remote, canada"]}
+        
+        # Should filter out
+        canada_only = "Senior Developer - Remote, Canada"
+        assert scraper.should_filter_by_location(canada_only, filters) is True
+        
+        # Should keep (has "and" so doesn't match "remote, canada" exactly)
+        us_and_canada = "Senior Developer - Remote, US and Canada"
+        assert scraper.should_filter_by_location(us_and_canada, filters) is False
+

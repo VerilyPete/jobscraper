@@ -12,6 +12,7 @@ A Python CLI application that scrapes company job boards for matching positions 
 - 💬 Text output to stdout
 - ⚙️ Interactive configuration mode
 - 🆕 **Match history tracking** - Automatically detects new vs previously found jobs
+- 🌎 **Location filtering** - Per-company filters (e.g., exclude Canada-only positions)
 
 ## Quick Start
 
@@ -111,10 +112,74 @@ The configuration is stored in `config.json`:
       "name": "Company Name",
       "job_board_url": "https://company.com/careers",
       "keywords": ["backend", "frontend"]
+    },
+    {
+      "name": "Company With Exclude Filter",
+      "job_board_url": "https://company.com/careers",
+      "keywords": ["engineer"],
+      "location_filters": {
+        "exclude": ["remote, canada"]
+      }
+    },
+    {
+      "name": "Company With Include Filter",
+      "job_board_url": "https://company.com/careers",
+      "keywords": ["engineer"],
+      "location_filters": {
+        "include": ["remote, us", "us and canada"]
+      }
     }
   ]
 }
 ```
+
+### Optional Company Configuration Fields
+
+- **`keywords`** (array of strings, default: `[]`): Company-specific keywords to search for in addition to universal keywords.
+
+- **`location_filters`** (object, optional): Filter jobs by location patterns. Supports both `include` and `exclude` strategies:
+  - **`include`** (array of strings): Only include jobs matching at least one of these patterns (whitelist approach)
+  - **`exclude`** (array of strings): Exclude jobs matching any of these patterns (blacklist approach)
+  - Both can be used together: include filters are checked first, then exclude filters
+  - Patterns are case-insensitive substring matches
+  
+  **Examples:**
+  ```json
+  // Exclude Canada-only positions (but keep "US and Canada")
+  "location_filters": {
+    "exclude": ["remote, canada"]
+  }
+  
+  // Only include US positions
+  "location_filters": {
+    "include": ["remote, us", "remote - united states", "us and canada"]
+  }
+  
+  // Include US positions but exclude specific states
+  "location_filters": {
+    "include": ["remote, us"],
+    "exclude": ["california", "new york"]
+  }
+  ```
+
+- **`pre_scrape_actions`** (array of objects, optional): Actions to perform before scraping (e.g., clicking filters, selecting options). Useful for job boards that require interaction to show all positions. Each action has:
+  - `type`: Action type (`click`, `fill`, `select`, `check`, `uncheck`, `press`, `hover`)
+  - `selector`: CSS selector or text selector for the element
+  - `value`: Value to use (for `fill`, `select`, `press` actions)
+  - `wait_for_network_idle`: Whether to wait for network to settle after the action
+  - `timeout`: Timeout in milliseconds (default: 5000)
+  
+  Example:
+  ```json
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "text=Remote (United States)",
+      "wait_for_network_idle": true,
+      "timeout": 10000
+    }
+  ]
+  ```
 
 ## Keyword Matching
 

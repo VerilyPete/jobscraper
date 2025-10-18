@@ -46,6 +46,56 @@ class JobScraper:
         
         return matched
     
+    def matches_location_pattern(self, text: str, pattern: str) -> bool:
+        """Check if text matches a location pattern (case-insensitive).
+        
+        Supports simple substring matching and basic wildcards.
+        """
+        if not text or not pattern:
+            return False
+        
+        text_lower = text.lower()
+        pattern_lower = pattern.lower()
+        
+        # Simple substring match
+        return pattern_lower in text_lower
+    
+    def should_filter_by_location(self, text: str, location_filters: Dict) -> bool:
+        """Check if job should be filtered based on location filters.
+        
+        Args:
+            text: Job text (title + description)
+            location_filters: Dict with 'include' and/or 'exclude' arrays
+        
+        Returns:
+            True if job should be filtered out, False if it should be kept
+        """
+        if not location_filters:
+            return False
+        
+        include_patterns = location_filters.get('include', [])
+        exclude_patterns = location_filters.get('exclude', [])
+        
+        # If include patterns are specified, job must match at least one
+        if include_patterns:
+            matches_include = any(
+                self.matches_location_pattern(text, pattern)
+                for pattern in include_patterns
+            )
+            if not matches_include:
+                return True  # Filter out (doesn't match any include pattern)
+        
+        # If exclude patterns are specified, job must not match any
+        if exclude_patterns:
+            matches_exclude = any(
+                self.matches_location_pattern(text, pattern)
+                for pattern in exclude_patterns
+            )
+            if matches_exclude:
+                return True  # Filter out (matches an exclude pattern)
+        
+        return False  # Keep the job
+    
     async def extract_jobs_from_page(self, page: Page) -> List[Dict[str, str]]:
         """Extract job listings from current page."""
         jobs = []
@@ -333,11 +383,69 @@ class JobScraper:
         
         return False
     
+    async def execute_pre_scrape_actions(self, page: Page, actions: List[Dict]) -> None:
+        """Execute pre-scrape actions before extracting jobs."""
+        if not actions:
+            return
+        
+        print(f"   Executing {len(actions)} pre-scrape action(s)...")
+        
+        for i, action in enumerate(actions):
+            action_type = action.get('type')
+            selector = action.get('selector')
+            value = action.get('value')
+            wait_for_network_idle = action.get('wait_for_network_idle', False)
+            action_timeout = action.get('timeout', 5000)
+            
+            try:
+                locator = page.locator(selector).first
+                
+                # Wait for element to be visible
+                await locator.wait_for(state='visible', timeout=action_timeout)
+                
+                # Perform action
+                if action_type == 'click':
+                    await locator.click()
+                elif action_type == 'fill':
+                    await locator.fill(value or '')
+                elif action_type == 'select':
+                    await locator.select_option(value)
+                elif action_type == 'check':
+                    await locator.check()
+                elif action_type == 'uncheck':
+                    await locator.uncheck()
+                elif action_type == 'press':
+                    await locator.press(value or 'Enter')
+                elif action_type == 'hover':
+                    await locator.hover()
+                else:
+                    print(f"   ⚠ Unknown action type: {action_type}")
+                    continue
+                
+                print(f"   ✓ Action {i+1}: {action_type} on {selector[:50]}...")
+                
+                # Wait for network to settle if requested
+                if wait_for_network_idle:
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=self.timeout)
+                    except:
+                        # If networkidle times out, continue anyway
+                        print(f"   ⚠ Network idle timeout after action {i+1}, continuing...")
+                else:
+                    # Small delay to let UI update
+                    await asyncio.sleep(0.5)
+                    
+            except Exception as e:
+                print(f"   ⚠ Failed action {i+1} ({action_type}): {str(e)[:100]}")
+                # Continue with remaining actions
+                continue
+    
     async def scrape_company(self, browser, company: Dict) -> List[JobMatch]:
         """Scrape jobs from a single company."""
         company_name = company.get('name', 'Unknown')
         job_board_url = company.get('job_board_url', '')
         company_keywords = [k.lower() for k in company.get('keywords', [])]
+        location_filters = company.get('location_filters', None)
         
         # Combine universal and company-specific keywords
         all_keywords = list(set(self.universal_keywords + company_keywords))
@@ -353,8 +461,14 @@ class JobScraper:
         matches = []
         
         try:
-            page = await browser.new_page()
+            # Create page with reasonable viewport size to ensure filters/controls are visible
+            page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
             await page.goto(job_board_url, timeout=self.timeout)
+            
+            # Execute pre-scrape actions if configured
+            pre_scrape_actions = company.get('pre_scrape_actions', [])
+            if pre_scrape_actions:
+                await self.execute_pre_scrape_actions(page, pre_scrape_actions)
             
             page_count = 0
             all_jobs = []
@@ -377,9 +491,16 @@ class JobScraper:
             
             print(f"   Found {len(all_jobs)} job listings")
             
-            # Match keywords
+            # Match keywords and apply filters
+            location_filtered = 0
             for job in all_jobs:
                 combined_text = f"{job['title']} {job['description']}"
+                
+                # Apply location filters if configured for this company
+                if self.should_filter_by_location(combined_text, location_filters):
+                    location_filtered += 1
+                    continue
+                
                 matched_keywords = self.match_keywords(combined_text, all_keywords)
                 
                 if matched_keywords:
@@ -390,6 +511,8 @@ class JobScraper:
                         matched_keywords=matched_keywords
                     ))
             
+            if location_filtered > 0:
+                print(f"   ℹ Filtered out {location_filtered} job(s) by location")
             print(f"   ✓ Found {len(matches)} matching jobs")
             
             await page.close()

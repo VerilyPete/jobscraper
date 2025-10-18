@@ -5,6 +5,39 @@
       "name": "Example Company",
       "job_board_url": "https://example.com/careers",
       "keywords": ["backend", "api"]
+    },
+    {
+      "name": "Example Company with Pre-Scrape Actions",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "pre_scrape_actions": [
+        {
+          "type": "click",
+          "selector": "button:has-text('Show All Locations')",
+          "wait_for_network_idle": true
+        },
+        {
+          "type": "check",
+          "selector": "input[name='remote-only']",
+          "wait_for_network_idle": true
+        }
+      ]
+    },
+    {
+      "name": "Example Company with Exclude Filter",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "location_filters": {
+        "exclude": ["remote, canada", "canada only"]
+      }
+    },
+    {
+      "name": "Example Company with Include Filter",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "location_filters": {
+        "include": ["remote, us", "remote - united states", "us and canada"]
+      }
     }
   ]
 }
