@@ -96,12 +96,124 @@ class JobScraper:
         
         return False  # Keep the job
     
-    async def extract_jobs_from_page(self, page: Page) -> List[Dict[str, str]]:
-        """Extract job listings from current page."""
+    async def extract_jobs_with_custom_config(self, page: Page, custom_config: Dict, wait_state: str = 'networkidle', timeout: int = None) -> List[Dict[str, str]]:
+        """Extract job listings using custom scraping configuration."""
         jobs = []
+        found_jobs = set()
+        
+        if timeout is None:
+            timeout = self.timeout
         
         # Wait for page to be ready
-        await page.wait_for_load_state('networkidle', timeout=self.timeout)
+        await page.wait_for_load_state(wait_state, timeout=timeout)
+        
+        # Get page content
+        content = await page.content()
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Get custom selectors
+        container_selectors = custom_config.get('container_selectors', [])
+        link_selector = custom_config.get('link_selector')
+        title_selector = custom_config.get('title_selector')
+        description_selector = custom_config.get('description_selector')
+        exclude_patterns = custom_config.get('exclude_patterns', {})
+        exclude_urls = exclude_patterns.get('urls', [])
+        exclude_titles = exclude_patterns.get('titles', [])
+        
+        # Try each container selector in order
+        job_containers = []
+        for selector in container_selectors:
+            containers = soup.select(selector)
+            if containers:
+                job_containers = containers
+                break
+        
+        # Process each container
+        for container in job_containers:
+            # Skip if in nav, header, or footer
+            if container.find_parent(['nav', 'header', 'footer']):
+                continue
+            
+            # Find link using custom selector or default
+            if link_selector:
+                link = container.select_one(link_selector)
+            else:
+                link = container.find('a', href=True)
+            
+            if not link:
+                continue
+            
+            url = link.get('href', '')
+            if not url:
+                continue
+            
+            # Make URL absolute if needed
+            if url.startswith('/'):
+                url = page.url.split('/')[0] + '//' + page.url.split('/')[2] + url
+            elif not url.startswith('http'):
+                continue
+            
+            # Check exclude URL patterns
+            if any(pattern in url for pattern in exclude_urls):
+                continue
+            
+            # Skip if it's the careers page itself
+            base_url = url.split('?')[0].rstrip('/')
+            base_page_url = page.url.split('?')[0].rstrip('/')
+            if base_url == base_page_url:
+                continue
+            
+            # Find title using custom selector
+            title = ''
+            if title_selector:
+                title_elem = container.select_one(title_selector)
+                if title_elem:
+                    title = title_elem.get_text(separator=' ', strip=True)
+            else:
+                # Fallback to link text
+                title = link.get_text(separator=' ', strip=True)
+            
+            # Skip if no meaningful title
+            if not title or len(title) < 3:
+                continue
+            
+            # Check exclude title patterns
+            title_lower = title.lower()
+            if any(keyword in title_lower for keyword in exclude_titles):
+                continue
+            
+            # Get description
+            if description_selector:
+                desc_elem = container.select_one(description_selector)
+                description = desc_elem.get_text(separator=' ', strip=True) if desc_elem else ''
+            else:
+                description = container.get_text(separator=' ', strip=True)
+            
+            # Avoid duplicates
+            if url not in found_jobs:
+                found_jobs.add(url)
+                jobs.append({
+                    'title': title,
+                    'url': url,
+                    'description': description
+                })
+        
+        return jobs
+    
+    async def extract_jobs_from_page(self, page: Page, wait_state: str = 'networkidle', timeout: int = None, custom_config: Dict = None) -> List[Dict[str, str]]:
+        """Extract job listings from current page."""
+        # If custom config provided, use custom extraction logic
+        if custom_config:
+            return await self.extract_jobs_with_custom_config(page, custom_config, wait_state, timeout)
+        
+        # Otherwise, use default generic logic
+        jobs = []
+        
+        if timeout is None:
+            timeout = self.timeout
+        
+        # Wait for page to be ready
+        await page.wait_for_load_state(wait_state, timeout=timeout)
         
         # Get page content
         content = await page.content()
@@ -325,11 +437,18 @@ class JobScraper:
         
         return jobs
     
-    async def check_for_next_page(self, page: Page) -> bool:
+    async def check_for_next_page(self, page: Page, custom_pagination_selectors: List[str] = None) -> bool:
         """Check if there's a next page and navigate to it."""
-        # Conservative pagination patterns - only match actual pagination controls
-        # Be very specific to avoid false positives
-        next_selectors = [
+        # If custom pagination selectors provided, use only those
+        if custom_pagination_selectors is not None:
+            # Empty array means no pagination
+            if not custom_pagination_selectors:
+                return False
+            next_selectors = custom_pagination_selectors
+        else:
+            # Conservative pagination patterns - only match actual pagination controls
+            # Be very specific to avoid false positives
+            next_selectors = [
             # Aria label patterns
             'a[aria-label="Next"]',
             'a[aria-label="Next page"]',
@@ -446,6 +565,12 @@ class JobScraper:
         job_board_url = company.get('job_board_url', '')
         company_keywords = [k.lower() for k in company.get('keywords', [])]
         location_filters = company.get('location_filters', None)
+        # Allow per-company timeout override (in milliseconds)
+        timeout = company.get('timeout', self.timeout)
+        # Allow per-company wait state override ('networkidle', 'load', 'domcontentloaded')
+        wait_for_load_state = company.get('wait_for_load_state', 'networkidle')
+        # Allow per-company custom scraping configuration
+        scraping_config = company.get('scraping_config', None)
         
         # Combine universal and company-specific keywords
         all_keywords = list(set(self.universal_keywords + company_keywords))
@@ -463,7 +588,7 @@ class JobScraper:
         try:
             # Create page with reasonable viewport size to ensure filters/controls are visible
             page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
-            await page.goto(job_board_url, timeout=self.timeout)
+            await page.goto(job_board_url, timeout=timeout)
             
             # Execute pre-scrape actions if configured
             pre_scrape_actions = company.get('pre_scrape_actions', [])
@@ -478,11 +603,12 @@ class JobScraper:
                 page_count += 1
                 print(f"   Scraping page {page_count}...")
                 
-                jobs = await self.extract_jobs_from_page(page)
+                jobs = await self.extract_jobs_from_page(page, wait_state=wait_for_load_state, timeout=timeout, custom_config=scraping_config)
                 all_jobs.extend(jobs)
                 
                 # Check for next page
-                has_next = await self.check_for_next_page(page)
+                custom_pagination = scraping_config.get('pagination_selectors') if scraping_config else None
+                has_next = await self.check_for_next_page(page, custom_pagination_selectors=custom_pagination)
                 if not has_next:
                     break
                 

@@ -181,6 +181,39 @@ The configuration is stored in `config.json`:
   ]
   ```
 
+- **`wait_for_load_state`** (string, default: `"networkidle"`): Load state to wait for before scraping. Options:
+  - `"networkidle"` (default): Wait until network activity settles (recommended for most sites)
+  - `"load"`: Wait only for the page load event (faster, use for sites with continuous background activity)
+  - `"domcontentloaded"`: Wait only for DOM to be ready (fastest, use with caution)
+  
+  Use `"load"` for sites that have ads, tracking, or analytics that prevent networkidle from being reached.
+
+- **`scraping_config`** (object, optional): Override default scraping logic with custom selectors. Use when default logic finds wrong elements or misses jobs. All fields optional - only specify what needs customization:
+
+  - **`container_selectors`** (array of strings): CSS selectors for job containers, tried in order until jobs found. Use specific selectors to avoid false matches.
+    
+    Example: `["div.job-listing", "article.position"]`
+  
+  - **`link_selector`** (string): CSS selector to find job link within container.
+    
+    Example: `"a[href*='/job/']"`
+  
+  - **`title_selector`** (string): CSS selector to find job title within container.
+    
+    Example: `"h3, h2, .job-title"`
+  
+  - **`description_selector`** (string, optional): CSS selector for job description. Defaults to container text.
+  
+  - **`exclude_patterns`** (object, optional): Patterns to filter out non-job matches:
+    - `urls` (array): URL patterns to exclude (e.g., `["/careers/$", "/search"]`)
+    - `titles` (array): Title keywords to exclude (e.g., `["talent network", "filter"]`)
+  
+  - **`pagination_selectors`** (array of strings): Conservative pagination selectors. Empty array `[]` disables pagination.
+    
+    Example: `["a.pagination-next", "button.load-more"]`
+
+  **When to use**: If scraper finds 0 jobs, wrong elements, or scrapes phantom pages, add custom config with specific selectors found via Playwright MCP inspection.
+
 ## Keyword Matching
 
 - **Case-insensitive**: "Python" matches "python", "PYTHON", etc.
