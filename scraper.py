@@ -633,7 +633,7 @@ class JobScraper:
                             await next_button.click()
                             await page.wait_for_load_state('networkidle', timeout=self.timeout)
                             return True
-            finally:
+            except Exception:
                 continue
         
         return False
