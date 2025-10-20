@@ -43,36 +43,42 @@ def find_free_port():
     return port
 
 
-class FixtureHTTPRequestHandler(SimpleHTTPRequestHandler):
-    """Custom HTTP request handler for serving test fixtures."""
-    
-    def __init__(self, *args, fixtures_dir=None, **kwargs):
-        self.fixtures_dir = fixtures_dir
-        super().__init__(*args, directory=fixtures_dir, **kwargs)
-    
-    def log_message(self, format, *args):
-        """Suppress log messages."""
-        pass
-
-
 @pytest.fixture(scope="session")
 def http_server():
     """Start an HTTP server to serve test fixtures."""
     fixtures_dir = os.path.join(os.path.dirname(__file__), 'fixtures')
+    fixtures_dir = os.path.abspath(fixtures_dir)
+    
+    # Ensure fixtures directory exists
+    if not os.path.exists(fixtures_dir):
+        raise RuntimeError(f"Fixtures directory not found: {fixtures_dir}")
+    
     port = find_free_port()
     
-    def create_handler(*args, **kwargs):
-        return FixtureHTTPRequestHandler(*args, fixtures_dir=fixtures_dir, **kwargs)
+    # Change to fixtures directory for SimpleHTTPRequestHandler
+    original_dir = os.getcwd()
+    os.chdir(fixtures_dir)
     
-    server = HTTPServer(('localhost', port), create_handler)
+    class QuietHTTPRequestHandler(SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+            """Suppress log messages."""
+            pass
+    
+    server = HTTPServer(('localhost', port), QuietHTTPRequestHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     
     base_url = f"http://localhost:{port}"
+    
+    # Give server a moment to start
+    import time
+    time.sleep(0.1)
+    
     yield base_url
     
     server.shutdown()
     thread.join(timeout=1)
+    os.chdir(original_dir)
 
 
 @pytest.fixture
