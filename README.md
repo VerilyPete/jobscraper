@@ -58,7 +58,7 @@ Add the company Philo (https://www.philo.com/jobs/job-board) to config.json.
 They have 5 jobs posted. Configure the scraping settings to return all 5 jobs.
 ```
 
-**What Claude will do:**
+**What the model will do:**
 1. Navigate to the job board using Playwright
 2. Inspect the HTML structure to find job containers
 3. Identify the correct selectors for links, titles, and pagination
@@ -109,7 +109,36 @@ This will prompt you to:
 2. Add companies with their job board URLs
 3. Add company-specific keywords for each company
 
-**Pro tip:** You can enter keywords as a comma-separated list for faster input!
+**Note:** You can enter keywords as a comma-separated list for faster input!
+
+---
+
+## Pro Tips
+
+### Bake Filters into the URL
+
+Many job boards let you apply filters (location, department, job type) and the selections are reflected in the URL. **Save the filtered URL** as your `job_board_url` to avoid needing `pre_scrape_actions`:
+
+**Example - Oracle with filters pre-applied:**
+```json
+{
+  "name": "Oracle",
+  "job_board_url": "https://careers.oracle.com/jobs/?keyword=Engineering&location=United%20States&locationId=300000000149325",
+  "keywords": ["senior", "cloud"]
+}
+```
+
+This URL already has "Engineering & Development" and "United States" selected, so the scraper immediately sees only relevant jobs.
+
+**How to find the filtered URL:**
+1. Go to the company's job board
+2. Apply your desired filters (location, department, remote, etc.)
+3. Copy the URL from your browser's address bar
+4. Use that URL in your config
+
+This is often simpler and more reliable than clicking filters with `pre_scrape_actions`!
+
+---
 
 ### Running the Scraper
 
@@ -336,6 +365,18 @@ The configuration is stored in `config.json`:
       // Each click loads ~15 more jobs
     }
   ]
+  ```
+
+- **`timeout`** (integer, default: `30000`): Page load timeout in milliseconds. Override when a company's job board is particularly slow to load or faster than average.
+  
+  Example:
+  ```json
+  {
+    "name": "Slow Company",
+    "job_board_url": "https://example.com/careers",
+    "keywords": ["engineer"],
+    "timeout": 60000  // 60 seconds instead of default 30
+  }
   ```
 
 - **`wait_for_load_state`** (string, default: `"networkidle"`): Load state to wait for before scraping. Options:
