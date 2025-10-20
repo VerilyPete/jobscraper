@@ -45,6 +45,9 @@ job_matches.html
 # uv
 .uv/
 
+# Playwright MCP
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db

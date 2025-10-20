@@ -1,39 +1,64 @@
 {
+  "_comment": "Example configuration showing all available customization options. See README.md for detailed documentation of each field.",
   "universal_keywords": ["python", "remote", "senior"],
   "companies": [
     {
-      "name": "Example Company",
+      "name": "Example Company (Basic)",
       "job_board_url": "https://example.com/careers",
       "keywords": ["backend", "api"]
     },
     {
-      "name": "Example Company with Pre-Scrape Actions",
+      "name": "Example Company with Cookie Banner & Filters",
       "job_board_url": "https://example.com/careers",
       "keywords": ["engineer"],
       "pre_scrape_actions": [
         {
           "type": "click",
+          "selector": "button:has-text('Accept all')",
+          "wait_after": 1000
+        },
+        {
+          "type": "click",
           "selector": "button:has-text('Show All Locations')",
-          "wait_for_network_idle": true
+          "wait_after": 500
         },
         {
           "type": "check",
           "selector": "input[name='remote-only']",
-          "wait_for_network_idle": true
+          "wait_after": 1000
         }
       ]
     },
     {
-      "name": "Example Company with Repeat Click",
+      "name": "Example Company with Load More Button",
       "job_board_url": "https://example.com/careers",
       "keywords": ["engineer"],
+      "wait_for_load_state": "load",
       "pre_scrape_actions": [
         {
           "type": "click",
-          "selector": "button:has-text('Show More')",
+          "selector": "button:has-text('Show More Results')",
           "wait_after": 2000,
           "repeat_until_gone": true,
-          "max_repeats": 50
+          "max_repeats": 100
+        }
+      ]
+    },
+    {
+      "name": "Example Company with Dynamic Content",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "wait_for_load_state": "load",
+      "pre_scrape_actions": [
+        {
+          "type": "click",
+          "selector": "text=Remote only",
+          "wait_after": 1000
+        },
+        {
+          "type": "wait",
+          "selector": "[role='region']",
+          "timeout": 10000
         }
       ]
     },
@@ -46,7 +71,7 @@
       }
     },
     {
-      "name": "Example Company with Include Filter",
+      "name": "Example Company with Location Include Filter",
       "job_board_url": "https://example.com/careers",
       "keywords": ["engineer"],
       "location_filters": {
@@ -54,10 +79,13 @@
       }
     },
     {
-      "name": "Example Company with Custom Load State",
+      "name": "Example Company with Include & Exclude Filters",
       "job_board_url": "https://example.com/careers",
       "keywords": ["engineer"],
-      "wait_for_load_state": "load"
+      "location_filters": {
+        "include": ["remote, us"],
+        "exclude": ["california", "new york"]
+      }
     },
     {
       "name": "Example Company with Custom Scraping",

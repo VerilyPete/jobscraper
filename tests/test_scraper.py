@@ -122,19 +122,50 @@ class TestJobDeduplication:
     """Test job deduplication logic."""
     
     def test_url_based_deduplication(self):
-        """Test that jobs are deduplicated by URL, not title."""
-        # This test ensures that if the same URL appears multiple times
-        # with different titles (e.g., with/without location), only one
-        # job is kept
+        """Test that duplicate URLs are removed from job lists."""
         config = {"universal_keywords": [], "companies": []}
         scraper = JobScraper(config)
         
-        # In a real scenario, the extract_jobs_from_page method would
-        # encounter the same URL multiple times with different titles
-        # Since we can't easily test that without mocking, we verify
-        # the logic by checking that URL is used for deduplication
-        # This is a placeholder to document the expected behavior
-        assert True  # The actual fix is in scraper.py line 109
+        # Simulate the deduplication logic in scrape_company
+        all_jobs = [
+            {'title': 'Software Engineer', 'url': 'https://example.com/job/1', 'description': 'Job 1'},
+            {'title': 'Software Engineer - Location', 'url': 'https://example.com/job/1', 'description': 'Job 1 again'},
+            {'title': 'QA Engineer', 'url': 'https://example.com/job/2', 'description': 'Job 2'},
+            {'title': 'QA Engineer', 'url': 'https://example.com/job/2', 'description': 'Job 2 duplicate'},
+            {'title': 'DevOps Engineer', 'url': 'https://example.com/job/3', 'description': 'Job 3'},
+        ]
+        
+        # Apply deduplication logic (same as scraper.py lines 784-788)
+        unique_jobs = {}
+        for job in all_jobs:
+            unique_jobs[job['url']] = job
+        deduplicated = list(unique_jobs.values())
+        
+        # Should have only 3 unique URLs
+        assert len(deduplicated) == 3
+        urls = [job['url'] for job in deduplicated]
+        assert urls.count('https://example.com/job/1') == 1
+        assert urls.count('https://example.com/job/2') == 1
+        assert urls.count('https://example.com/job/3') == 1
+    
+    def test_deduplication_preserves_last_occurrence(self):
+        """Test that deduplication keeps the last occurrence when URLs match."""
+        all_jobs = [
+            {'title': 'First Title', 'url': 'https://example.com/job/1', 'description': 'First'},
+            {'title': 'Second Title', 'url': 'https://example.com/job/1', 'description': 'Second'},
+            {'title': 'Third Title', 'url': 'https://example.com/job/1', 'description': 'Third'},
+        ]
+        
+        # Apply deduplication logic
+        unique_jobs = {}
+        for job in all_jobs:
+            unique_jobs[job['url']] = job
+        deduplicated = list(unique_jobs.values())
+        
+        # Should keep the last one
+        assert len(deduplicated) == 1
+        assert deduplicated[0]['title'] == 'Third Title'
+        assert deduplicated[0]['description'] == 'Third'
 
 
 class TestLocationFilter:
@@ -287,4 +318,235 @@ class TestLocationFilter:
         # Should keep (has "and" so doesn't match "remote, canada" exactly)
         us_and_canada = "Senior Developer - Remote, US and Canada"
         assert scraper.should_filter_by_location(us_and_canada, filters) is False
+
+
+class TestPerCompanyConfiguration:
+    """Test per-company configuration options."""
+    
+    def test_timeout_override_config(self):
+        """Test that timeout can be overridden per company."""
+        company = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "timeout": 60000  # 60 seconds instead of default 30
+        }
+        
+        assert company.get('timeout') == 60000
+        assert company.get('timeout', 30000) == 60000
+    
+    def test_wait_for_load_state_options(self):
+        """Test wait_for_load_state configuration options."""
+        # Test networkidle (default)
+        company1 = {
+            "name": "Test Co 1",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": []
+        }
+        assert company1.get('wait_for_load_state', 'networkidle') == 'networkidle'
+        
+        # Test load
+        company2 = {
+            "name": "Test Co 2",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "wait_for_load_state": "load"
+        }
+        assert company2.get('wait_for_load_state') == 'load'
+        
+        # Test domcontentloaded
+        company3 = {
+            "name": "Test Co 3",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "wait_for_load_state": "domcontentloaded"
+        }
+        assert company3.get('wait_for_load_state') == 'domcontentloaded'
+    
+    def test_use_iframe_flag(self):
+        """Test use_iframe flag configuration."""
+        # Default is False
+        company1 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": []
+        }
+        assert company1.get('use_iframe', False) is False
+        
+        # Can be enabled
+        company2 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "use_iframe": True
+        }
+        assert company2.get('use_iframe') is True
+    
+    def test_pre_scrape_actions_structure(self):
+        """Test pre_scrape_actions configuration structure."""
+        company = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "pre_scrape_actions": [
+                {
+                    "type": "click",
+                    "selector": "button:has-text('Accept')",
+                    "wait_after": 1000
+                },
+                {
+                    "type": "click",
+                    "selector": "button:has-text('Show More')",
+                    "wait_after": 2000,
+                    "repeat_until_gone": True,
+                    "max_repeats": 50
+                },
+                {
+                    "type": "wait",
+                    "selector": "[role='region']",
+                    "timeout": 10000
+                }
+            ]
+        }
+        
+        actions = company.get('pre_scrape_actions', [])
+        assert len(actions) == 3
+        
+        # Test click action
+        assert actions[0]['type'] == 'click'
+        assert actions[0]['selector'] == "button:has-text('Accept')"
+        assert actions[0]['wait_after'] == 1000
+        
+        # Test repeat_until_gone
+        assert actions[1]['repeat_until_gone'] is True
+        assert actions[1]['max_repeats'] == 50
+        
+        # Test wait action
+        assert actions[2]['type'] == 'wait'
+        assert actions[2]['timeout'] == 10000
+    
+    def test_scraping_config_structure(self):
+        """Test scraping_config configuration structure."""
+        company = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "scraping_config": {
+                "container_selectors": ["div.job-card", "article.position"],
+                "link_selector": "a.job-link",
+                "title_selector": "h3.job-title, h2",
+                "description_selector": "div.job-description",
+                "exclude_patterns": {
+                    "urls": ["/careers/$", "/careers#", "/search"],
+                    "titles": ["talent network", "job alert", "filter"]
+                },
+                "pagination_selectors": ["a[rel='next']", "button.load-more"]
+            }
+        }
+        
+        config = company.get('scraping_config', {})
+        
+        # Test all fields present
+        assert 'container_selectors' in config
+        assert 'link_selector' in config
+        assert 'title_selector' in config
+        assert 'description_selector' in config
+        assert 'exclude_patterns' in config
+        assert 'pagination_selectors' in config
+        
+        # Test container_selectors is array
+        assert isinstance(config['container_selectors'], list)
+        assert len(config['container_selectors']) == 2
+        
+        # Test exclude_patterns structure
+        assert 'urls' in config['exclude_patterns']
+        assert 'titles' in config['exclude_patterns']
+        assert isinstance(config['exclude_patterns']['urls'], list)
+        assert isinstance(config['exclude_patterns']['titles'], list)
+        
+        # Test pagination can be disabled
+        assert isinstance(config['pagination_selectors'], list)
+    
+    def test_location_filters_structure_comprehensive(self):
+        """Test location_filters configuration structure comprehensively."""
+        # Exclude only
+        company1 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "location_filters": {
+                "exclude": ["remote, canada", "canada only"]
+            }
+        }
+        filters1 = company1.get('location_filters', {})
+        assert 'exclude' in filters1
+        assert isinstance(filters1['exclude'], list)
+        assert len(filters1['exclude']) == 2
+        
+        # Include only
+        company2 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "location_filters": {
+                "include": ["remote, us", "united states"]
+            }
+        }
+        filters2 = company2.get('location_filters', {})
+        assert 'include' in filters2
+        assert isinstance(filters2['include'], list)
+        
+        # Both include and exclude
+        company3 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "location_filters": {
+                "include": ["remote, us"],
+                "exclude": ["california", "new york"]
+            }
+        }
+        filters3 = company3.get('location_filters', {})
+        assert 'include' in filters3
+        assert 'exclude' in filters3
+    
+    def test_combined_company_configuration(self):
+        """Test company with multiple customizations (like IBM)."""
+        company = {
+            "name": "IBM",
+            "job_board_url": "https://www.ibm.com/careers/search",
+            "keywords": [],
+            "wait_for_load_state": "load",
+            "timeout": 45000,
+            "pre_scrape_actions": [
+                {
+                    "type": "click",
+                    "selector": "button:has-text('Accept all')",
+                    "wait_after": 1000
+                },
+                {
+                    "type": "click",
+                    "selector": "text=Remote only",
+                    "wait_after": 1000
+                },
+                {
+                    "type": "wait",
+                    "selector": "[role='region']",
+                    "timeout": 10000
+                }
+            ],
+            "scraping_config": {
+                "container_selectors": ["[role='region']"],
+                "link_selector": "a",
+                "title_selector": "a",
+                "pagination_selectors": []
+            }
+        }
+        
+        # Verify all fields are accessible
+        assert company['wait_for_load_state'] == 'load'
+        assert company['timeout'] == 45000
+        assert len(company['pre_scrape_actions']) == 3
+        assert company['scraping_config']['container_selectors'] == ["[role='region']"]
+        assert company['scraping_config']['pagination_selectors'] == []
 

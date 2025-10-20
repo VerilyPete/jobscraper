@@ -2,6 +2,8 @@
 
 A Python CLI application that scrapes company job boards for matching positions based on configurable keywords.
 
+![Tests](https://github.com/VerilyPete/jobscraper/actions/workflows/tests.yml/badge.svg)
+
 ## Features
 
 - 🔍 Scrapes multiple company job boards
@@ -12,7 +14,12 @@ A Python CLI application that scrapes company job boards for matching positions 
 - 💬 Text output to stdout
 - ⚙️ Interactive configuration mode
 - 🆕 **Match history tracking** - Automatically detects new vs previously found jobs
-- 🌎 **Location filtering** - Per-company filters (e.g., exclude Canada-only positions)
+- 🌎 **Location filtering** - Per-company include/exclude filters
+- 🎯 **Site-specific scraping configuration** - Custom selectors per company
+- 🖱️ **Pre-scrape actions** - Click filters, accept cookies, load more content
+- 🔄 **Dynamic content loading** - Repeat-click buttons until all content loads
+- 🖼️ **Iframe support** - Extract jobs from embedded job boards
+- 🧪 **Single company testing** - Test configurations one company at a time
 
 ## Quick Start
 
@@ -93,6 +100,9 @@ uv run python main.py --config my_config.json
 # Specify custom HTML output file
 uv run python main.py --output results.html
 
+# Scrape only a single company (useful for testing)
+uv run python main.py --company "Company Name"
+
 # Enter configuration mode
 uv run python main.py --configure
 
@@ -162,23 +172,55 @@ The configuration is stored in `config.json`:
   }
   ```
 
-- **`pre_scrape_actions`** (array of objects, optional): Actions to perform before scraping (e.g., clicking filters, selecting options). Useful for job boards that require interaction to show all positions. Each action has:
-  - `type`: Action type (`click`, `fill`, `select`, `check`, `uncheck`, `press`, `hover`)
-  - `selector`: CSS selector or text selector for the element
-  - `value`: Value to use (for `fill`, `select`, `press` actions)
-  - `wait_for_network_idle`: Whether to wait for network to settle after the action
-  - `timeout`: Timeout in milliseconds (default: 5000)
+- **`pre_scrape_actions`** (array of objects, optional): Actions to perform before scraping (e.g., clicking filters, accepting cookies, loading more content). Useful for job boards that require interaction to show all positions. Each action supports:
   
-  Example:
+  - **`type`** (required): Action type
+    - `click` - Click an element
+    - `fill` - Fill text into an input
+    - `select` - Select an option from dropdown
+    - `check` - Check a checkbox
+    - `uncheck` - Uncheck a checkbox
+    - `press` - Press a keyboard key
+    - `hover` - Hover over an element
+    - `wait` - Wait for an element to appear (no interaction)
+  
+  - **`selector`** (required): CSS selector or Playwright text selector (e.g., `"button:has-text('Accept')"`, `"text=Remote Only"`)
+  
+  - **`value`** (optional): Value to use for `fill`, `select`, or `press` actions
+  
+  - **`wait_after`** (optional): Milliseconds to wait after action completes (default: 500)
+  
+  - **`wait_for_network_idle`** (optional): Whether to wait for network to settle after the action (default: false)
+  
+  - **`timeout`** (optional): Element visibility timeout in milliseconds (default: 5000)
+  
+  - **`repeat_until_gone`** (optional, `click` only): Keep clicking until element disappears. Perfect for "Load More" or "Show More Results" buttons. Use with:
+    - `max_repeats` (optional): Maximum number of clicks (default: 50)
+  
+  **Examples:**
   ```json
-  "pre_scrape_actions": [
-    {
-      "type": "click",
-      "selector": "text=Remote (United States)",
-      "wait_for_network_idle": true,
-      "timeout": 10000
-    }
-  ]
+  // Accept cookie banner
+  {
+    "type": "click",
+    "selector": "button:has-text('Accept all')",
+    "wait_after": 1000
+  }
+  
+  // Click "Show More" until all content loads
+  {
+    "type": "click",
+    "selector": "button:has-text('Show More Results')",
+    "wait_after": 2000,
+    "repeat_until_gone": true,
+    "max_repeats": 100
+  }
+  
+  // Wait for dynamic content to load
+  {
+    "type": "wait",
+    "selector": "[role='region']",
+    "timeout": 10000
+  }
   ```
 
 - **`wait_for_load_state`** (string, default: `"networkidle"`): Load state to wait for before scraping. Options:
@@ -213,6 +255,136 @@ The configuration is stored in `config.json`:
     Example: `["a.pagination-next", "button.load-more"]`
 
   **When to use**: If scraper finds 0 jobs, wrong elements, or scrapes phantom pages, add custom config with specific selectors found via Playwright MCP inspection.
+
+- **`use_iframe`** (boolean, default: `false`): Extract jobs from iframes instead of main page. Some job boards (especially those using Greenhouse, Breezy HR, or similar platforms) embed their job listings in iframes. When enabled:
+  - The scraper searches all iframes on the page
+  - Looks for job-related content using specialized patterns
+  - Extracts jobs with proper URL and title handling
+  
+  **When to use**: If you see an embedded job board on the page but the scraper returns 0 jobs, the jobs are likely in an iframe. Combine with `wait_for_load_state: "load"` and pre-scrape actions for cookie banners.
+  
+  Example:
+  ```json
+  {
+    "name": "Company with Iframe Jobs",
+    "job_board_url": "https://example.com/careers",
+    "keywords": ["engineer"],
+    "wait_for_load_state": "load",
+    "use_iframe": true,
+    "pre_scrape_actions": [
+      {
+        "type": "click",
+        "selector": "button:has-text('Accept Cookies')",
+        "wait_after": 2000
+      }
+    ]
+  }
+  ```
+
+## Common Configuration Patterns
+
+### Pattern 1: Standard Job Board (Works Out of the Box)
+Most job boards work with zero configuration:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"]
+}
+```
+
+### Pattern 2: Job Board with Cookie Banner
+Accept cookies before scraping:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"],
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "button:has-text('Accept')",
+      "wait_after": 1000
+    }
+  ]
+}
+```
+
+### Pattern 3: Job Board with "Load More" Button
+Click "Show More" until all jobs load:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"],
+  "wait_for_load_state": "load",
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "button:has-text('Show More')",
+      "wait_after": 2000,
+      "repeat_until_gone": true,
+      "max_repeats": 100
+    }
+  ]
+}
+```
+
+### Pattern 4: Jobs in an Iframe (Greenhouse, Breezy HR, etc.)
+Extract jobs from embedded job boards:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"],
+  "wait_for_load_state": "load",
+  "use_iframe": true
+}
+```
+
+### Pattern 5: Job Board with Filters
+Click filters to show relevant jobs:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"],
+  "wait_for_load_state": "load",
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "text=Remote only",
+      "wait_after": 1000
+    },
+    {
+      "type": "click",
+      "selector": "text=United States",
+      "wait_after": 2000
+    },
+    {
+      "type": "wait",
+      "selector": "[role='region']",
+      "timeout": 10000
+    }
+  ]
+}
+```
+
+### Pattern 6: Custom Scraping for Unusual Structure
+Override selectors when default logic fails:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://company.com/careers",
+  "keywords": ["engineer"],
+  "scraping_config": {
+    "container_selectors": ["main li", "div.job-card"],
+    "link_selector": "a",
+    "title_selector": "h2, h3",
+    "pagination_selectors": []
+  }
+}
+```
 
 ## Keyword Matching
 
@@ -259,7 +431,20 @@ uv run pytest -v
 
 # Run specific test file
 uv run pytest tests/test_scraper.py -v
+
+# Run with coverage
+uv run pytest --cov=. --cov-report=html
 ```
+
+### Continuous Integration
+
+Tests run automatically on every push and pull request via GitHub Actions. The workflow:
+- Runs all 104 tests (unit + integration)
+- Uses Python 3.12 on Ubuntu
+- Installs Playwright Chromium browser
+- Typically completes in 2-4 minutes
+
+See `.github/workflows/tests.yml` for workflow configuration.
 
 ### Project Structure
 
@@ -298,17 +483,30 @@ jobscraper/
 ## Troubleshooting
 
 **No jobs found?**
-- Check that the job board URL is correct
-- Try broader keywords
-- Some job boards may have unusual structures (check the HTML)
+- **Check the URL**: Ensure the job board URL is correct and accessible
+- **Try the `--company` flag**: Test one company at a time to isolate issues
+- **Check for iframes**: If you see jobs on the page but scraper finds 0, try adding `"use_iframe": true`
+- **Inspect with Playwright**: Use Playwright's browser tools to find the right selectors
+- **Add custom scraping config**: Some job boards need specific `container_selectors`
+- **Check for dynamic content**: Add `pre_scrape_actions` if jobs load after clicking "Show More"
+- **Try broader keywords**: Make keywords less specific to catch more matches
 
 **Timeout errors?**
-- Some job boards may be slow to load
-- The scraper waits up to 30 seconds per page
+- **Use `"wait_for_load_state": "load"`**: Many sites have background requests that prevent `networkidle`
+- **Check pre-scrape action selectors**: If an action times out, the selector might be wrong
+- **Increase action timeout**: Add `"timeout": 10000` to specific pre-scrape actions
+- **Check for cookie banners**: Add a click action to dismiss them before other actions
 
-**Missing jobs?**
-- The scraper looks for common patterns in job listings
-- Some custom job boards may need selector adjustments in `scraper.py`
+**Wrong jobs or phantom pages scraped?**
+- **Add custom `scraping_config`**: Use specific `container_selectors` to target only job listings
+- **Add `exclude_patterns`**: Filter out non-job links and titles
+- **Set `pagination_selectors: []`**: Disable pagination if it's clicking the wrong buttons
+
+**Jobs appearing multiple times?**
+- This should be automatically fixed by URL deduplication, but if it persists, check if the same job has multiple URLs
+
+**Jobs from wrong locations?**
+- **Use `location_filters`**: Add `exclude` patterns for unwanted locations or `include` patterns for desired ones
 
 ## License
 
