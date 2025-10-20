@@ -116,6 +116,12 @@
           "wait_after": 2000
         }
       ]
+    },
+    {
+      "name": "Example Company with Many Pages",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "max_pages": 50
     }
   ]
 }

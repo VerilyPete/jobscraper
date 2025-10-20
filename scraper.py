@@ -1,7 +1,7 @@
 """Web scraping functionality for job boards."""
 import asyncio
 import re
-from typing import List, Dict, Set
+from typing import List, Dict
 from playwright.async_api import async_playwright, Page, TimeoutError as PlaywrightTimeout
 from bs4 import BeautifulSoup
 
@@ -585,39 +585,39 @@ class JobScraper:
             # Conservative pagination patterns - only match actual pagination controls
             # Be very specific to avoid false positives
             next_selectors = [
-            # Aria label patterns
-            'a[aria-label="Next"]',
-            'a[aria-label="Next page"]',
-            'button[aria-label="Next"]',
-            'button[aria-label="Next page"]',
-            
-            # Rel attribute (standard HTML pagination)
-            'a[rel="next"]',
-            
-            # Specific class names (common job board patterns)
-            'a.next-page',
-            'a.pagination-next',
-            'button.next-page',
-            'button.pagination-next',
-            
-            # Text content patterns (with Playwright :has-text)
-            'nav a:has-text("Next")',
-            'nav button:has-text("Next")',
-            'div[role="navigation"] a:has-text("Next")',
-            'div[role="navigation"] button:has-text("Next")',
-            
-            # "Load More" / "Show More" patterns
-            'button:has-text("Show More")',
-            'button:has-text("Load More")',
-            'a:has-text("Show More")',
-            'a:has-text("Load More")',
-            
-            # Strict pagination container patterns
-            'nav.pagination a.next',
-            'ul.pagination a.next',
-            'div.pagination a.next',
-            'nav[aria-label*="pagination" i] a:last-child',
-        ]
+                # Aria label patterns
+                'a[aria-label="Next"]',
+                'a[aria-label="Next page"]',
+                'button[aria-label="Next"]',
+                'button[aria-label="Next page"]',
+                
+                # Rel attribute (standard HTML pagination)
+                'a[rel="next"]',
+                
+                # Specific class names (common job board patterns)
+                'a.next-page',
+                'a.pagination-next',
+                'button.next-page',
+                'button.pagination-next',
+                
+                # Text content patterns (with Playwright :has-text)
+                'nav a:has-text("Next")',
+                'nav button:has-text("Next")',
+                'div[role="navigation"] a:has-text("Next")',
+                'div[role="navigation"] button:has-text("Next")',
+                
+                # "Load More" / "Show More" patterns
+                'button:has-text("Show More")',
+                'button:has-text("Load More")',
+                'a:has-text("Show More")',
+                'a:has-text("Load More")',
+                
+                # Strict pagination container patterns
+                'nav.pagination a.next',
+                'ul.pagination a.next',
+                'div.pagination a.next',
+                'nav[aria-label*="pagination" i] a:last-child',
+            ]
         
         for selector in next_selectors:
             try:
@@ -633,7 +633,7 @@ class JobScraper:
                             await next_button.click()
                             await page.wait_for_load_state('networkidle', timeout=self.timeout)
                             return True
-            except:
+            finally:
                 continue
         
         return False
@@ -711,7 +711,7 @@ class JobScraper:
                     if wait_for_network_idle:
                         try:
                             await page.wait_for_load_state('networkidle', timeout=self.timeout)
-                        except:
+                        except Exception:
                             # If networkidle times out, continue anyway
                             print(f"   ⚠ Network idle timeout after action {i+1}, continuing...")
                     else:
@@ -764,8 +764,11 @@ class JobScraper:
             page_count = 0
             all_jobs = []
             
+            # Get max_pages override or use default
+            company_max_pages = company.get('max_pages', self.max_pages)
+            
             # Scrape first page and handle pagination
-            while page_count < self.max_pages:
+            while page_count < company_max_pages:
                 page_count += 1
                 print(f"   Scraping page {page_count}...")
                 
@@ -828,7 +831,7 @@ class JobScraper:
             print("No companies configured. Use --configure to add companies.")
             return []
         
-        print(f"Starting job scraper...")
+        print("Starting job scraper...")
         print(f"Universal keywords: {', '.join(self.universal_keywords) if self.universal_keywords else 'None'}")
         print(f"Companies to scrape: {len(self.companies)}")
         

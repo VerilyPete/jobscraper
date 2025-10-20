@@ -48,6 +48,40 @@ A Python CLI application that scrapes company job boards for matching positions 
    - Check the console output
    - Open `job_matches.html` in your browser
 
+## Lazy Mode: Adding Companies with Playwright MCP
+
+Too lazy to manually figure out selectors? Let your LLM do the work! If you have the [Playwright MCP](https://github.com/executeautomation/playwright-mcp-server) server configured, you can add companies with a single prompt:
+
+**Example prompt:**
+```
+Add the company Philo (https://www.philo.com/jobs/job-board) to config.json. 
+They have 5 jobs posted. Configure the scraping settings to return all 5 jobs.
+```
+
+**What Claude will do:**
+1. Navigate to the job board using Playwright
+2. Inspect the HTML structure to find job containers
+3. Identify the correct selectors for links, titles, and pagination
+4. Test the configuration to verify it finds the expected number of jobs
+5. Add the properly configured entry to your `config.json`
+
+**Result:**
+```json
+{
+  "name": "Philo",
+  "job_board_url": "https://www.philo.com/jobs/job-board",
+  "keywords": [],
+  "scraping_config": {
+    "container_selectors": ["main li"],
+    "link_selector": "a",
+    "title_selector": "h3",
+    "pagination_selectors": []
+  }
+}
+```
+
+This is especially useful for job boards with unusual HTML structures that don't work with the default scraping logic. No more manual selector hunting!
+
 ## Installation
 
 This project uses `uv` for dependency management:
@@ -222,6 +256,87 @@ The configuration is stored in `config.json`:
     "timeout": 10000
   }
   ```
+  
+  **Real-World Examples:**
+  
+  **IBM - Multiple filters with dynamic content:**
+  ```json
+  // IBM's job board requires accepting cookies, then clicking filters,
+  // and waiting for the job list to dynamically populate
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "button:has-text('Accept all')",
+      "wait_after": 1000
+      // Dismiss cookie banner that blocks the page
+    },
+    {
+      "type": "click",
+      "selector": "text=Remote only",
+      "wait_after": 1000
+      // Click the "Remote only" filter to show only remote positions
+    },
+    {
+      "type": "click",
+      "selector": "button:has-text('Location')",
+      "wait_after": 500
+      // Open the location dropdown menu
+    },
+    {
+      "type": "click",
+      "selector": "text=United States",
+      "wait_after": 1000
+      // Select "United States" from the location dropdown
+    },
+    {
+      "type": "wait",
+      "selector": "[role='region']",
+      "timeout": 10000
+      // Wait for the filtered job results to load into the page
+      // The jobs appear in elements with role="region"
+    }
+  ]
+  ```
+  
+  **Twitch - Sequential clicks to reveal hidden options:**
+  ```json
+  // Twitch hides location options until you click "Offices" first,
+  // then you can select specific remote locations
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "text=Offices",
+      "wait_after": 500
+      // Click "Offices" button to reveal the location filter list
+      // Without this, "Remote (United States)" isn't visible
+    },
+    {
+      "type": "click",
+      "selector": "text=Remote (United States)",
+      "wait_after": 1000
+      // Now that the list is visible, select remote US positions
+    }
+  ]
+  ```
+  
+  **Oracle - Load all pages of results:**
+  ```json
+  // Oracle uses a "Show More Results" button instead of pagination
+  // If you're scraping for IC engineer roles, that could be as many as 1500 jobs
+  // Need to click it repeatedly to load them all
+  "pre_scrape_actions": [
+    {
+      "type": "click",
+      "selector": "button:has-text('Show More Results')",
+      "wait_after": 2000,
+      "repeat_until_gone": true,
+      "max_repeats": 110
+      // Clicks the button, waits 2s for jobs to load, then clicks again
+      // Continues until button disappears or hits 110 clicks (safety limit)
+      // Each click loads ~15 more jobs
+    }
+  ]
+  ```
 
 - **`wait_for_load_state`** (string, default: `"networkidle"`): Load state to wait for before scraping. Options:
   - `"networkidle"` (default): Wait until network activity settles (recommended for most sites)
@@ -278,6 +393,42 @@ The configuration is stored in `config.json`:
         "wait_after": 2000
       }
     ]
+  }
+  ```
+
+- **`max_pages`** (integer, default: `10`): Maximum number of pages to scrape before stopping. Override when a site legitimately has many pages of results. The default of 10 is a safety measure to prevent infinite pagination loops.
+  
+  **When to override:** If you know a site has more than 10 pages of results and you want to scrape them all. For example, large companies may have 50+ pages of engineering roles.
+  
+  **Important:** This only applies to traditional pagination (Next/Previous buttons, page numbers). Sites using "Load More" buttons with `repeat_until_gone` should disable pagination instead by setting `"pagination_selectors": []` in their `scraping_config`.
+  
+  Example:
+  ```json
+  {
+    "name": "Large Company",
+    "job_board_url": "https://example.com/careers",
+    "keywords": ["engineer"],
+    "max_pages": 50
+  }
+  ```
+  
+  **For sites with "Load More" buttons:** If you use `repeat_until_gone` to load all content, disable pagination to prevent false positive page detection:
+  ```json
+  {
+    "name": "Oracle",
+    "job_board_url": "https://oracle.com/careers",
+    "keywords": [],
+    "pre_scrape_actions": [
+      {
+        "type": "click",
+        "selector": "button:has-text('Show More')",
+        "repeat_until_gone": true,
+        "max_repeats": 110
+      }
+    ],
+    "scraping_config": {
+      "pagination_selectors": []
+    }
   }
   ```
 

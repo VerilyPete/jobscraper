@@ -549,4 +549,33 @@ class TestPerCompanyConfiguration:
         assert len(company['pre_scrape_actions']) == 3
         assert company['scraping_config']['container_selectors'] == ["[role='region']"]
         assert company['scraping_config']['pagination_selectors'] == []
+    
+    def test_max_pages_override(self):
+        """Test that max_pages can be overridden per company."""
+        # Default is 10 (from scraper default)
+        company1 = {
+            "name": "Test Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": []
+        }
+        assert company1.get('max_pages', 10) == 10
+        
+        # Can be overridden to higher values
+        company2 = {
+            "name": "Large Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "max_pages": 50
+        }
+        assert company2.get('max_pages') == 50
+        assert company2.get('max_pages', 10) == 50
+        
+        # Can be set very high for sites with many legitimate pages
+        company3 = {
+            "name": "Very Large Co",
+            "job_board_url": "https://example.com/jobs",
+            "keywords": [],
+            "max_pages": 150
+        }
+        assert company3.get('max_pages') == 150
 
