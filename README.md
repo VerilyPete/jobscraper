@@ -50,7 +50,7 @@ A Python CLI application that scrapes company job boards for matching positions 
 
 ## Lazy Mode: Adding Companies with Playwright MCP
 
-Too lazy to manually figure out selectors? Let your LLM do the work! If you have the [Playwright MCP](https://github.com/executeautomation/playwright-mcp-server) server configured, you can add companies with a single prompt:
+Too lazy to manually figure out selectors? Let your LLM do the work! If you have the Playwright MCP server or Claude Skill configured, you can add companies with a single prompt:
 
 **Example prompt:**
 ```
@@ -384,7 +384,7 @@ The configuration is stored in `config.json`:
   - `"load"`: Wait only for the page load event (faster, use for sites with continuous background activity)
   - `"domcontentloaded"`: Wait only for DOM to be ready (fastest, use with caution)
   
-  Use `"load"` for sites that have ads, tracking, or analytics that prevent networkidle from being reached.
+  Use `"load"` for sites that have ads, tracking, or analytics that prevent networkidle from being reached. (Often due to adblock.)
 
 - **`scraping_config`** (object, optional): Override default scraping logic with custom selectors. Use when default logic finds wrong elements or misses jobs. All fields optional - only specify what needs customization:
 
