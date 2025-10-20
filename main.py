@@ -15,6 +15,7 @@ def main():
         epilog="""
 Examples:
   %(prog)s                     # Run scraper with existing configuration
+  %(prog)s --company IBM       # Scrape only IBM
   %(prog)s --configure         # Enter interactive configuration mode
   %(prog)s --output results.html  # Specify custom output file
         """
@@ -38,6 +39,11 @@ Examples:
         help='Path to HTML output file (default: job_matches.html)'
     )
     
+    parser.add_argument(
+        '--company',
+        help='Scrape only the specified company (case-insensitive)'
+    )
+    
     args = parser.parse_args()
     
     # Initialize config manager
@@ -53,6 +59,23 @@ Examples:
         print("Error: No companies configured.")
         print("Run with --configure to add companies and keywords.")
         return 1
+    
+    # Filter for single company if specified
+    if args.company:
+        company_name = args.company.lower()
+        filtered_companies = [
+            c for c in config_manager.config['companies']
+            if c['name'].lower() == company_name
+        ]
+        
+        if not filtered_companies:
+            print(f"Error: Company '{args.company}' not found in configuration.")
+            available = ', '.join(c['name'] for c in config_manager.config['companies'])
+            print(f"Available companies: {available}")
+            return 1
+        
+        config_manager.config['companies'] = filtered_companies
+        print(f"Scraping only: {filtered_companies[0]['name']}\n")
     
     # Run scraper
     try:

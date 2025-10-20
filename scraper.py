@@ -200,13 +200,149 @@ class JobScraper:
         
         return jobs
     
-    async def extract_jobs_from_page(self, page: Page, wait_state: str = 'networkidle', timeout: int = None, custom_config: Dict = None) -> List[Dict[str, str]]:
+    async def extract_jobs_from_iframe(self, page: Page, wait_state: str = 'networkidle', timeout: int = None) -> List[Dict[str, str]]:
+        """Try to extract jobs from iframes on the page."""
+        jobs = []
+        
+        try:
+            # Get all frames (iframes)
+            frames = page.frames
+            
+            for frame in frames:
+                # Skip the main frame
+                if frame == page.main_frame:
+                    continue
+                
+                try:
+                    # Wait for frame to load
+                    await frame.wait_for_load_state(wait_state, timeout=timeout or self.timeout)
+                    
+                    # Get frame content
+                    content = await frame.content()
+                    soup = BeautifulSoup(content, 'html.parser')
+                    
+                    # Check if this looks like a job board (common indicators)
+                    frame_text = soup.get_text().lower()
+                    job_indicators = ['job', 'position', 'career', 'opening', 'apply', 'role']
+                    has_job_content = any(indicator in frame_text for indicator in job_indicators)
+                    
+                    if not has_job_content:
+                        continue
+                    
+                    # Try to extract jobs using similar logic to main extraction
+                    job_containers = []
+                    
+                    # Look for common job listing patterns (Greenhouse and similar ATS)
+                    # Be specific to avoid picking up navigation/header elements
+                    for selector in [
+                        '.opening',  # Greenhouse uses this
+                        'div.opening',
+                        'section.level-0',  # Some Greenhouse boards
+                        'div[id*="job"]',  # Jobs with IDs
+                    ]:
+                        containers = soup.select(selector)
+                        job_containers.extend(containers)
+                    
+                    # Deduplicate containers
+                    seen_containers = set()
+                    unique_containers = []
+                    for container in job_containers:
+                        container_id = id(container)
+                        if container_id not in seen_containers:
+                            seen_containers.add(container_id)
+                            unique_containers.append(container)
+                    
+                    # Process containers
+                    for container in unique_containers:
+                        link = container.find('a', href=True)
+                        if not link:
+                            continue
+                        
+                        url = link.get('href', '')
+                        if not url or url.startswith('#'):
+                            continue
+                        
+                        # Filter out non-job URLs (navigation, etc.)
+                        url_lower = url.lower()
+                        exclude_patterns = ['/embed/', '/careers$', '/careers/$', '/careers#', '#', 'javascript:', 'mailto:']
+                        if any(pattern in url_lower for pattern in exclude_patterns):
+                            continue
+                        
+                        # Job URLs should have some path beyond just the base
+                        if url.count('/') < 4:  # e.g., https://domain.com/job/123 has 4 slashes
+                            continue
+                        
+                        # Make URL absolute if needed
+                        if not url.startswith('http'):
+                            frame_url = frame.url
+                            if url.startswith('/'):
+                                # Get base URL from frame
+                                from urllib.parse import urlparse
+                                parsed = urlparse(frame_url)
+                                url = f"{parsed.scheme}://{parsed.netloc}{url}"
+                            else:
+                                url = f"{frame_url.rsplit('/', 1)[0]}/{url}"
+                        
+                        # Extract title
+                        title = ''
+                        title_elem = container.find(['h1', 'h2', 'h3', 'h4', 'h5'])
+                        if title_elem:
+                            title = title_elem.get_text(separator=' ', strip=True)
+                        elif link.get_text(strip=True):
+                            title = link.get_text(separator=' ', strip=True)
+                        
+                        if not title:
+                            continue
+                        
+                        # Filter out non-job titles
+                        title_lower = title.lower()
+                        exclude_titles = ['view all', 'see all', 'back to', 'home', 'careers', 'about', 'apply']
+                        if any(exclude in title_lower for exclude in exclude_titles):
+                            continue
+                        
+                        # Title should have some substance (more than just a location or department)
+                        if len(title.split()) < 2:
+                            continue
+                        
+                        # Extract description
+                        description = ''
+                        desc_elem = container.find(['p', 'div'])
+                        if desc_elem:
+                            description = desc_elem.get_text(separator=' ', strip=True)
+                        
+                        job_key = (url, title)
+                        if job_key not in [(j['url'], j['title']) for j in jobs]:
+                            jobs.append({
+                                'url': url,
+                                'title': title,
+                                'description': description
+                            })
+                    
+                    print(f"   ℹ Found {len(jobs)} jobs in iframe")
+                    
+                except Exception:
+                    # Frame might be inaccessible or errored, skip it
+                    continue
+                    
+        except Exception:
+            # If iframe extraction fails entirely, return empty list
+            pass
+        
+        return jobs
+    
+    async def extract_jobs_from_page(self, page: Page, wait_state: str = 'networkidle', timeout: int = None, custom_config: Dict = None, use_iframe: bool = False) -> List[Dict[str, str]]:
         """Extract job listings from current page."""
         # If custom config provided, use custom extraction logic
         if custom_config:
             return await self.extract_jobs_with_custom_config(page, custom_config, wait_state, timeout)
         
-        # Otherwise, use default generic logic
+        # Only try iframe extraction if explicitly enabled
+        if use_iframe:
+            iframe_jobs = await self.extract_jobs_from_iframe(page, wait_state, timeout)
+            if iframe_jobs:
+                return iframe_jobs
+        
+        # Otherwise, use default generic logic on main page
         jobs = []
         
         if timeout is None:
@@ -515,44 +651,72 @@ class JobScraper:
             value = action.get('value')
             wait_for_network_idle = action.get('wait_for_network_idle', False)
             action_timeout = action.get('timeout', 5000)
+            repeat_until_gone = action.get('repeat_until_gone', False)
+            wait_after = action.get('wait_after', 500)  # ms to wait after each action
+            max_repeats = action.get('max_repeats', 50)  # Safety limit for repeating actions
             
             try:
-                locator = page.locator(selector).first
-                
-                # Wait for element to be visible
-                await locator.wait_for(state='visible', timeout=action_timeout)
-                
-                # Perform action
-                if action_type == 'click':
-                    await locator.click()
-                elif action_type == 'fill':
-                    await locator.fill(value or '')
-                elif action_type == 'select':
-                    await locator.select_option(value)
-                elif action_type == 'check':
-                    await locator.check()
-                elif action_type == 'uncheck':
-                    await locator.uncheck()
-                elif action_type == 'press':
-                    await locator.press(value or 'Enter')
-                elif action_type == 'hover':
-                    await locator.hover()
+                if repeat_until_gone and action_type == 'click':
+                    # Keep clicking until element is no longer visible
+                    click_count = 0
+                    while click_count < max_repeats:
+                        try:
+                            locator = page.locator(selector).first
+                            # Check if element is visible with a short timeout
+                            await locator.wait_for(state='visible', timeout=2000)
+                            await locator.click()
+                            click_count += 1
+                            print(f"   ✓ Action {i+1}: {action_type} on {selector[:50]}... (click {click_count})")
+                            # Wait after click
+                            await asyncio.sleep(wait_after / 1000)
+                        except Exception:
+                            # Element no longer visible or clickable
+                            print(f"   ✓ Action {i+1} complete after {click_count} clicks (element gone)")
+                            break
+                    
+                    if click_count >= max_repeats:
+                        print(f"   ⚠ Action {i+1} stopped after {max_repeats} clicks (max limit)")
                 else:
-                    print(f"   ⚠ Unknown action type: {action_type}")
-                    continue
-                
-                print(f"   ✓ Action {i+1}: {action_type} on {selector[:50]}...")
-                
-                # Wait for network to settle if requested
-                if wait_for_network_idle:
-                    try:
-                        await page.wait_for_load_state('networkidle', timeout=self.timeout)
-                    except:
-                        # If networkidle times out, continue anyway
-                        print(f"   ⚠ Network idle timeout after action {i+1}, continuing...")
-                else:
-                    # Small delay to let UI update
-                    await asyncio.sleep(0.5)
+                    # Single execution
+                    locator = page.locator(selector).first
+                    
+                    # Wait for element to be visible
+                    await locator.wait_for(state='visible', timeout=action_timeout)
+                    
+                    # Perform action
+                    if action_type == 'click':
+                        await locator.click()
+                    elif action_type == 'fill':
+                        await locator.fill(value or '')
+                    elif action_type == 'select':
+                        await locator.select_option(value)
+                    elif action_type == 'check':
+                        await locator.check()
+                    elif action_type == 'uncheck':
+                        await locator.uncheck()
+                    elif action_type == 'press':
+                        await locator.press(value or 'Enter')
+                    elif action_type == 'hover':
+                        await locator.hover()
+                    elif action_type == 'wait':
+                        # Just wait for element to be visible (already done above)
+                        pass
+                    else:
+                        print(f"   ⚠ Unknown action type: {action_type}")
+                        continue
+                    
+                    print(f"   ✓ Action {i+1}: {action_type} on {selector[:50]}...")
+                    
+                    # Wait for network to settle if requested
+                    if wait_for_network_idle:
+                        try:
+                            await page.wait_for_load_state('networkidle', timeout=self.timeout)
+                        except:
+                            # If networkidle times out, continue anyway
+                            print(f"   ⚠ Network idle timeout after action {i+1}, continuing...")
+                    else:
+                        # Small delay to let UI update
+                        await asyncio.sleep(wait_after / 1000)
                     
             except Exception as e:
                 print(f"   ⚠ Failed action {i+1} ({action_type}): {str(e)[:100]}")
@@ -571,6 +735,8 @@ class JobScraper:
         wait_for_load_state = company.get('wait_for_load_state', 'networkidle')
         # Allow per-company custom scraping configuration
         scraping_config = company.get('scraping_config', None)
+        # Allow per-company iframe extraction
+        use_iframe = company.get('use_iframe', False)
         
         # Combine universal and company-specific keywords
         all_keywords = list(set(self.universal_keywords + company_keywords))
@@ -603,7 +769,7 @@ class JobScraper:
                 page_count += 1
                 print(f"   Scraping page {page_count}...")
                 
-                jobs = await self.extract_jobs_from_page(page, wait_state=wait_for_load_state, timeout=timeout, custom_config=scraping_config)
+                jobs = await self.extract_jobs_from_page(page, wait_state=wait_for_load_state, timeout=timeout, custom_config=scraping_config, use_iframe=use_iframe)
                 all_jobs.extend(jobs)
                 
                 # Check for next page
@@ -614,6 +780,12 @@ class JobScraper:
                 
                 # Small delay to be respectful
                 await asyncio.sleep(1)
+            
+            # Deduplicate jobs by URL (in case DOM contains duplicates after dynamic loading)
+            unique_jobs = {}
+            for job in all_jobs:
+                unique_jobs[job['url']] = job
+            all_jobs = list(unique_jobs.values())
             
             print(f"   Found {len(all_jobs)} job listings")
             

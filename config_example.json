@@ -24,6 +24,20 @@
       ]
     },
     {
+      "name": "Example Company with Repeat Click",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "pre_scrape_actions": [
+        {
+          "type": "click",
+          "selector": "button:has-text('Show More')",
+          "wait_after": 2000,
+          "repeat_until_gone": true,
+          "max_repeats": 50
+        }
+      ]
+    },
+    {
       "name": "Example Company with Exclude Filter",
       "job_board_url": "https://example.com/careers",
       "keywords": ["engineer"],
@@ -60,6 +74,20 @@
         },
         "pagination_selectors": ["a[rel='next']", "button.load-more"]
       }
+    },
+    {
+      "name": "Example Company with Iframe Jobs",
+      "job_board_url": "https://example.com/careers",
+      "keywords": ["engineer"],
+      "wait_for_load_state": "load",
+      "use_iframe": true,
+      "pre_scrape_actions": [
+        {
+          "type": "click",
+          "selector": "button:has-text('Accept Cookies')",
+          "wait_after": 2000
+        }
+      ]
     }
   ]
 }
