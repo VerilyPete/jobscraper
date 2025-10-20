@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Careers</title>
+    <script>
+        let clickCount = 0;
+        function loadMoreJobs() {
+            clickCount++;
+            const container = document.getElementById('job-container');
+            const button = document.getElementById('load-more-btn');
+            
+            // Add new jobs
+            const newJobs = [
+                {title: `Job ${3 + clickCount * 2}`, id: 3 + clickCount * 2},
+                {title: `Job ${4 + clickCount * 2}`, id: 4 + clickCount * 2}
+            ];
+            
+            newJobs.forEach(job => {
+                const div = document.createElement('div');
+                div.className = 'job-item';
+                div.innerHTML = `<h3><a href="/jobs/${job.id}">${job.title}</a></h3><p>Description for ${job.title}</p>`;
+                container.appendChild(div);
+            });
+            
+            // Hide button after 3 clicks
+            if (clickCount >= 3) {
+                button.style.display = 'none';
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Open Positions</h1>
+    <div id="job-container">
+        <div class="job-item">
+            <h3><a href="/jobs/1">Senior Engineer</a></h3>
+            <p>Description for Senior Engineer</p>
+        </div>
+        <div class="job-item">
+            <h3><a href="/jobs/2">QA Analyst</a></h3>
+            <p>Description for QA Analyst</p>
+        </div>
+    </div>
+    <button id="load-more-btn" onclick="loadMoreJobs()">Show More Results</button>
+</body>
+</html>
+

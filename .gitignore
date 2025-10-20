@@ -41,6 +41,7 @@ htmlcov/
 config.json
 job_matches.html
 *.html
+!tests/fixtures/*.html
 
 # uv
 .uv/

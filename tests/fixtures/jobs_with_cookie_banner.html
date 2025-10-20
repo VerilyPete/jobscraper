@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Careers</title>
+    <style>
+        #cookie-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #333;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            z-index: 1000;
+        }
+        #cookie-banner.hidden {
+            display: none;
+        }
+        #job-content.hidden {
+            display: none;
+        }
+    </style>
+    <script>
+        function acceptCookies() {
+            document.getElementById('cookie-banner').classList.add('hidden');
+            document.getElementById('job-content').classList.remove('hidden');
+        }
+    </script>
+</head>
+<body>
+    <div id="cookie-banner">
+        <p>We use cookies to improve your experience.</p>
+        <button id="accept-cookies" onclick="acceptCookies()">Accept all</button>
+        <button onclick="acceptCookies()">Reject</button>
+    </div>
+    
+    <div id="job-content" class="hidden">
+        <h1>Open Positions</h1>
+        <div class="jobs">
+            <div class="job">
+                <h2><a href="/jobs/1">Senior Software Engineer</a></h2>
+                <p>Build amazing products with our engineering team.</p>
+            </div>
+            <div class="job">
+                <h2><a href="/jobs/2">Quality Assurance Manager</a></h2>
+                <p>Lead our QA efforts and ensure quality.</p>
+            </div>
+            <div class="job">
+                <h2><a href="/jobs/3">Engineering Manager</a></h2>
+                <p>Manage a team of talented engineers.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

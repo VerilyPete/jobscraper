@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Careers - Apply Filters</title>
+    <script>
+        function applyFilters() {
+            const remoteOnly = document.getElementById('remote-only').checked;
+            const usOnly = document.getElementById('us-only').checked;
+            const jobs = document.querySelectorAll('.job-item');
+            
+            jobs.forEach(job => {
+                const isRemote = job.dataset.remote === 'true';
+                const isUs = job.dataset.location === 'us';
+                
+                let visible = true;
+                if (remoteOnly && !isRemote) visible = false;
+                if (usOnly && !isUs) visible = false;
+                
+                job.style.display = visible ? 'block' : 'none';
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Open Positions</h1>
+    
+    <div class="filters">
+        <label>
+            <input type="checkbox" id="remote-only" name="remote-only" onchange="applyFilters()">
+            Remote only
+        </label>
+        <label>
+            <input type="checkbox" id="us-only" name="us-only" onchange="applyFilters()">
+            United States
+        </label>
+    </div>
+    
+    <div id="job-list">
+        <div class="job-item" data-remote="true" data-location="us">
+            <h3><a href="/jobs/1">Python Developer</a></h3>
+            <p>Remote, US</p>
+        </div>
+        <div class="job-item" data-remote="true" data-location="ca">
+            <h3><a href="/jobs/2">Java Developer</a></h3>
+            <p>Remote, Canada</p>
+        </div>
+        <div class="job-item" data-remote="false" data-location="us">
+            <h3><a href="/jobs/3">On-site Engineer</a></h3>
+            <p>San Francisco, US</p>
+        </div>
+        <div class="job-item" data-remote="true" data-location="us">
+            <h3><a href="/jobs/4">QA Manager</a></h3>
+            <p>Remote, US</p>
+        </div>
+    </div>
+</body>
+</html>
+
