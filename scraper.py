@@ -200,6 +200,131 @@ class JobScraper:
         
         return jobs
     
+    async def extract_jobs_by_clicking(self, page: Page, custom_config: Dict, wait_state: str = 'networkidle', timeout: int = None) -> List[Dict[str, str]]:
+        """Extract job listings by clicking on each job container to get the URL.
+        
+        This method is used for job boards that use JavaScript-based navigation
+        without traditional href links (e.g., Gem job boards).
+        """
+        jobs = []
+        
+        if timeout is None:
+            timeout = self.timeout
+        
+        # Wait for page to be ready
+        await page.wait_for_load_state(wait_state, timeout=timeout)
+        
+        # Get custom selectors
+        container_selectors = custom_config.get('container_selectors', [])
+        title_selector = custom_config.get('title_selector')
+        
+        if not container_selectors:
+            print("   ⚠ No container selectors specified for JavaScript navigation")
+            return jobs
+        
+        # Store the initial URL
+        initial_url = page.url
+        
+        # Wait for job containers to be present and use Playwright locators directly
+        found_selector = None
+        for selector in container_selectors:
+            try:
+                # Wait for at least one container to be visible
+                await page.wait_for_selector(selector, state='visible', timeout=10000)
+                found_selector = selector
+                break
+            except Exception:
+                continue
+        
+        if not found_selector:
+            print(f"   ℹ No job containers found with selectors: {container_selectors}")
+            return jobs
+        
+        # Get all matching containers using Playwright
+        containers = await page.locator(found_selector).all()
+        num_jobs = len(containers)
+        
+        if num_jobs == 0:
+            print(f"   ℹ No job containers found with selector: {found_selector}")
+            return jobs
+        
+        print(f"   ℹ Found {num_jobs} job containers, clicking each to extract URLs...")
+        
+        # Process each container by clicking it
+        for index in range(num_jobs):
+            try:
+                # Re-fetch containers on each iteration (DOM might change after navigation)
+                await page.wait_for_load_state(wait_state, timeout=timeout)
+                containers = await page.locator(found_selector).all()
+                
+                if index >= len(containers):
+                    print(f"   ⚠ Job {index + 1} no longer exists after re-fetch")
+                    continue
+                
+                container_elem = containers[index]
+                
+                # Extract title before clicking
+                title = ''
+                if title_selector:
+                    try:
+                        title_elem = await container_elem.locator(title_selector).first
+                        title = await title_elem.text_content()
+                        title = title.strip() if title else ''
+                    except Exception:
+                        pass
+                
+                if not title:
+                    # Try to get any text from the container
+                    title = await container_elem.text_content()
+                    title = title.strip() if title else ''
+                
+                # Click the container and wait for navigation
+                await container_elem.click()
+                
+                # Wait for navigation to complete
+                try:
+                    await page.wait_for_url(lambda url: url != initial_url, timeout=5000)
+                except Exception:
+                    # If URL didn't change, wait a bit and check again
+                    await asyncio.sleep(1)
+                
+                # Get the new URL
+                job_url = page.url
+                
+                # Only add if we actually navigated to a new page
+                if job_url != initial_url and not job_url.endswith('/'):
+                    jobs.append({
+                        'title': title,
+                        'url': job_url,
+                        'description': title  # We can't get description without loading the page
+                    })
+                    print(f"   ✓ Job {index + 1}/{num_jobs}: {title}")
+                
+                # Go back to the listing page
+                await page.goto(initial_url, timeout=timeout)
+                await page.wait_for_load_state(wait_state, timeout=timeout)
+                
+                # Wait for the job containers to be visible again after navigation
+                try:
+                    await page.wait_for_selector(found_selector, state='visible', timeout=5000)
+                except Exception:
+                    pass
+                
+                # Small delay to be respectful and let page stabilize
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                print(f"   ⚠ Error clicking job {index + 1}: {str(e)}")
+                # Try to recover by going back to initial page
+                try:
+                    await page.goto(initial_url, timeout=timeout)
+                    await page.wait_for_load_state(wait_state, timeout=timeout)
+                except Exception:
+                    pass
+                continue
+        
+        return jobs
+    
     async def extract_jobs_from_iframe(self, page: Page, wait_state: str = 'networkidle', timeout: int = None) -> List[Dict[str, str]]:
         """Try to extract jobs from iframes on the page."""
         jobs = []
@@ -332,6 +457,10 @@ class JobScraper:
     
     async def extract_jobs_from_page(self, page: Page, wait_state: str = 'networkidle', timeout: int = None, custom_config: Dict = None, use_iframe: bool = False) -> List[Dict[str, str]]:
         """Extract job listings from current page."""
+        # If custom config provided with JavaScript navigation, use clicking method
+        if custom_config and custom_config.get('use_js_navigation', False):
+            return await self.extract_jobs_by_clicking(page, custom_config, wait_state, timeout)
+        
         # If custom config provided, use custom extraction logic
         if custom_config:
             return await self.extract_jobs_with_custom_config(page, custom_config, wait_state, timeout)

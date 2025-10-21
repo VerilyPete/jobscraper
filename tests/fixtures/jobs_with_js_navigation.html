@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Job Board - JS Navigation</title>
+    <style>
+        .job-posting { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Open Positions (3)</h1>
+    <ul>
+        <li class="job-posting" onclick="navigateToJob('/jobs/qa-analyst')">
+            <div class="job-title">QA Analyst I</div>
+            <div class="job-location">Houston, TX • Hybrid</div>
+        </li>
+        <li class="job-posting" onclick="navigateToJob('/jobs/software-dev')">
+            <div class="job-title">Software Developer I</div>
+            <div class="job-location">Houston, TX • Hybrid</div>
+        </li>
+        <li class="job-posting" onclick="navigateToJob('/jobs/engineering-manager')">
+            <div class="job-title">Engineering Manager</div>
+            <div class="job-location">Remote, US</div>
+        </li>
+    </ul>
+    <script>
+        function navigateToJob(path) {
+            window.location.href = path;
+        }
+    </script>
+</body>
+</html>
+

@@ -820,3 +820,134 @@ class TestRealWorldPatterns:
         
         assert len(matches) >= 2
 
+
+class TestExtractJobsByClicking:
+    """Test extract_jobs_by_clicking method for JavaScript navigation."""
+    
+    @pytest.mark.asyncio
+    async def test_basic_js_navigation(self, page, fixture_url):
+        """Test basic JavaScript navigation extraction."""
+        url = fixture_url("jobs_with_js_navigation.html")
+        await page.goto(url)
+        
+        config = {
+            "universal_keywords": [],
+            "companies": []
+        }
+        scraper = JobScraper(config)
+        
+        custom_config = {
+            "container_selectors": ["li.job-posting"],
+            "title_selector": ".job-title"
+        }
+        
+        jobs = await scraper.extract_jobs_by_clicking(
+            page, custom_config, wait_state='load'
+        )
+        
+        assert len(jobs) == 3
+        assert any("QA Analyst" in job['title'] for job in jobs)
+        assert any("Software Developer" in job['title'] for job in jobs)
+        assert any("Engineering Manager" in job['title'] for job in jobs)
+        
+        # Check that URLs were captured
+        assert all(job['url'] for job in jobs)
+        assert any("/jobs/qa-analyst" in job['url'] for job in jobs)
+    
+    @pytest.mark.asyncio
+    async def test_js_navigation_with_title_selector(self, page, fixture_url):
+        """Test JavaScript navigation with custom title selector."""
+        url = fixture_url("jobs_with_js_navigation.html")
+        await page.goto(url)
+        
+        config = {
+            "universal_keywords": [],
+            "companies": []
+        }
+        scraper = JobScraper(config)
+        
+        custom_config = {
+            "container_selectors": ["li.job-posting"],
+            "title_selector": "div.job-title"
+        }
+        
+        jobs = await scraper.extract_jobs_by_clicking(
+            page, custom_config, wait_state='load'
+        )
+        
+        # Verify titles are properly extracted and jobs found
+        assert len(jobs) == 3
+        assert all(job['title'] for job in jobs)
+        # Verify we got actual job titles
+        assert any("QA Analyst" in job['title'] for job in jobs)
+    
+    @pytest.mark.asyncio
+    async def test_js_navigation_no_containers(self, page, fixture_url):
+        """Test JavaScript navigation when no containers found."""
+        url = fixture_url("basic_jobs.html")
+        await page.goto(url)
+        
+        config = {
+            "universal_keywords": [],
+            "companies": []
+        }
+        scraper = JobScraper(config)
+        
+        custom_config = {
+            "container_selectors": ["li.nonexistent-class"]
+        }
+        
+        jobs = await scraper.extract_jobs_by_clicking(
+            page, custom_config, wait_state='load'
+        )
+        
+        assert len(jobs) == 0
+    
+    @pytest.mark.asyncio
+    async def test_js_navigation_integration_with_extract_jobs_from_page(self, page, fixture_url):
+        """Test that extract_jobs_from_page uses clicking method when use_js_navigation is true."""
+        url = fixture_url("jobs_with_js_navigation.html")
+        await page.goto(url)
+        
+        config = {
+            "universal_keywords": [],
+            "companies": []
+        }
+        scraper = JobScraper(config)
+        
+        custom_config = {
+            "use_js_navigation": True,
+            "container_selectors": ["li.job-posting"],
+            "title_selector": ".job-title"
+        }
+        
+        jobs = await scraper.extract_jobs_from_page(
+            page, wait_state='load', custom_config=custom_config
+        )
+        
+        assert len(jobs) == 3
+        assert all(job['url'] for job in jobs)
+    
+    @pytest.mark.asyncio
+    async def test_js_navigation_without_title_selector(self, page, fixture_url):
+        """Test JavaScript navigation falls back to container text when no title selector."""
+        url = fixture_url("jobs_with_js_navigation.html")
+        await page.goto(url)
+        
+        config = {
+            "universal_keywords": [],
+            "companies": []
+        }
+        scraper = JobScraper(config)
+        
+        custom_config = {
+            "container_selectors": ["li.job-posting"]
+        }
+        
+        jobs = await scraper.extract_jobs_by_clicking(
+            page, custom_config, wait_state='load'
+        )
+        
+        # Should still extract titles from container text
+        assert len(jobs) == 3
+        assert all(job['title'] for job in jobs)

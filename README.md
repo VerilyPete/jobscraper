@@ -19,6 +19,7 @@ A Python CLI application that scrapes company job boards for matching positions 
 - 🖱️ **Pre-scrape actions** - Click filters, accept cookies, load more content
 - 🔄 **Dynamic content loading** - Repeat-click buttons until all content loads
 - 🖼️ **Iframe support** - Extract jobs from embedded job boards
+- 🖱️ **JavaScript navigation** - Extract jobs from boards using onclick handlers instead of href links
 - 🧪 **Single company testing** - Test configurations one company at a time
 
 ## Quick Start
@@ -437,6 +438,32 @@ The configuration is stored in `config.json`:
   }
   ```
 
+- **`use_js_navigation`** (boolean, default: `false`, used within `scraping_config`): Extract job URLs by clicking each job container instead of extracting href links. Some job boards (especially those using modern JavaScript frameworks like Gem) use onclick handlers for navigation rather than traditional anchor tags. When enabled:
+  - The scraper clicks each job listing one by one
+  - Captures the URL after JavaScript navigation completes
+  - Goes back to the listing page and repeats for all jobs
+  - Requires `container_selectors` and optionally `title_selector` in `scraping_config`
+  
+  **When to use**: If you see job listings on the page with proper titles and locations, but the scraper returns 0 jobs, the jobs likely use JavaScript-based navigation instead of href links. Check if list items have cursor:pointer style but no anchor tags.
+  
+  **Performance note**: This method is slower than standard scraping as it navigates to each job individually. For a board with 50 jobs, this will make 100+ page loads (50 jobs × 2 navigations each).
+  
+  Example:
+  ```json
+  {
+    "name": "Company with JS Navigation",
+    "job_board_url": "https://jobs.gem.com/company-name/",
+    "keywords": ["engineer"],
+    "wait_for_load_state": "load",
+    "scraping_config": {
+      "use_js_navigation": true,
+      "container_selectors": ["li[class*='jobPosting']"],
+      "title_selector": "[class*='jobTitle']",
+      "pagination_selectors": []
+    }
+  }
+  ```
+
 - **`max_pages`** (integer, default: `10`): Maximum number of pages to scrape before stopping. Override when a site legitimately has many pages of results. The default of 10 is a safety measure to prevent infinite pagination loops.
   
   **When to override:** If you know a site has more than 10 pages of results and you want to scrape them all. For example, large companies may have 50+ pages of engineering roles.
@@ -578,6 +605,24 @@ Override selectors when default logic fails:
 }
 ```
 
+### Pattern 7: JavaScript-Based Navigation (Gem, Modern SPAs)
+For job boards that use onclick handlers instead of href links:
+```json
+{
+  "name": "Company Name",
+  "job_board_url": "https://jobs.gem.com/company-name/",
+  "keywords": ["engineer"],
+  "wait_for_load_state": "load",
+  "scraping_config": {
+    "use_js_navigation": true,
+    "container_selectors": ["li[class*='jobPosting']"],
+    "title_selector": "[class*='jobTitle']",
+    "pagination_selectors": []
+  }
+}
+```
+**When to use this pattern**: When you see job listings displayed on the page, but clicking them navigates without traditional links. Common on Gem job boards and modern single-page applications. The scraper will click each job, capture the URL, and return to the list.
+
 ## Keyword Matching
 
 - **Case-insensitive**: "Python" matches "python", "PYTHON", etc.
@@ -678,6 +723,7 @@ jobscraper/
 - **Check the URL**: Ensure the job board URL is correct and accessible
 - **Try the `--company` flag**: Test one company at a time to isolate issues
 - **Check for iframes**: If you see jobs on the page but scraper finds 0, try adding `"use_iframe": true`
+- **Check for JavaScript navigation**: If jobs appear clickable but have no href links, try `"use_js_navigation": true` in `scraping_config`
 - **Inspect with Playwright**: Use Playwright's browser tools to find the right selectors
 - **Add custom scraping config**: Some job boards need specific `container_selectors`
 - **Check for dynamic content**: Add `pre_scrape_actions` if jobs load after clicking "Show More"

@@ -42,6 +42,7 @@ config.json
 job_matches.html
 *.html
 !tests/fixtures/*.html
+!tests/fixtures/jobs/*.html
 
 # uv
 .uv/
