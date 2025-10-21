@@ -2,12 +2,26 @@
 """Job scraper CLI application."""
 import argparse
 import sys
+import logging
 from config_manager import ConfigManager
-from scraper import run_scraper
+from scraper.core import run_scraper
 from output import output_results
 
 
-def main():
+def setup_logging(verbose: bool = False) -> None:
+    """Configure logging for the application.
+    
+    Args:
+        verbose: If True, set log level to DEBUG, otherwise INFO
+    """
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        format='%(message)s',
+        level=level
+    )
+
+
+def main() -> int:
     """Main entry point for CLI."""
     parser = argparse.ArgumentParser(
         description="Scrape job boards for matching positions",
@@ -44,7 +58,16 @@ Examples:
         help='Scrape only the specified company (case-insensitive)'
     )
     
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Enable verbose debug output'
+    )
+    
     args = parser.parse_args()
+    
+    # Setup logging
+    setup_logging(args.verbose)
     
     # Initialize config manager
     config_manager = ConfigManager(args.config)

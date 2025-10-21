@@ -2,8 +2,10 @@
 import os
 from typing import List, Set, Tuple
 from datetime import datetime
+from pathlib import Path
 from bs4 import BeautifulSoup
-from scraper import JobMatch
+from jinja2 import Environment, FileSystemLoader
+from scraper.core import JobMatch
 
 
 def parse_previous_matches(html_file: str) -> Set[str]:
@@ -124,413 +126,56 @@ def format_stdout(matches: List[JobMatch], new_matches: List[JobMatch] = None, e
 
 
 def generate_html(matches: List[JobMatch], output_file: str = "job_matches.html", new_matches: List[JobMatch] = None, existing_matches: List[JobMatch] = None) -> None:
-    """Generate HTML output file with styled table."""
+    """Generate HTML output file with styled table using Jinja2 template."""
     
-    # Group by company - determine which grouping to use
+    # Group by company
     by_company = {}
     for match in matches:
         if match.company not in by_company:
             by_company[match.company] = []
         by_company[match.company].append(match)
     
-    html_parts = []
+    # Prepare context for template
+    context = {
+        'matches': matches,
+        'by_company': by_company,
+        'current_date': datetime.now().strftime('%B %d, %Y'),
+        'generation_time': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+        'has_split_matches': new_matches is not None and existing_matches is not None,
+    }
     
-    # HTML header with inline CSS
-    html_parts.append("""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Matches</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    # Add split matches data if provided
+    if new_matches is not None and existing_matches is not None:
+        context['new_matches'] = new_matches
+        context['existing_matches'] = existing_matches
         
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 40px 20px;
-        }
+        # Group new matches by company
+        new_by_company = {}
+        for match in new_matches:
+            if match.company not in new_by_company:
+                new_by_company[match.company] = []
+            new_by_company[match.company].append(match)
+        context['new_by_company'] = new_by_company
         
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-        
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-        
-        .stats {
-            background: #f8f9fa;
-            padding: 20px 40px;
-            border-bottom: 1px solid #e9ecef;
-            display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-        }
-        
-        .stat {
-            text-align: center;
-            padding: 10px 20px;
-        }
-        
-        .stat-number {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
-        }
-        
-        .stat-label {
-            color: #6c757d;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .content {
-            padding: 40px;
-        }
-        
-        .company-section {
-            margin-bottom: 40px;
-        }
-        
-        .company-header {
-            background: #f8f9fa;
-            padding: 15px 20px;
-            border-left: 4px solid #667eea;
-            margin-bottom: 20px;
-            border-radius: 4px;
-        }
-        
-        .company-name {
-            font-size: 1.5em;
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .company-count {
-            color: #6c757d;
-            font-size: 0.9em;
-            margin-left: 10px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        th {
-            padding: 15px;
-            text-align: left;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.85em;
-            letter-spacing: 1px;
-        }
-        
-        td {
-            padding: 15px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        tbody tr {
-            transition: background-color 0.2s ease;
-        }
-        
-        tbody tr:hover {
-            background-color: #f8f9fa;
-        }
-        
-        tbody tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .job-title {
-            font-weight: 500;
-            color: #333;
-        }
-        
-        .job-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s ease;
-        }
-        
-        .job-link:hover {
-            color: #764ba2;
-            text-decoration: underline;
-        }
-        
-        .keywords {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        
-        .keyword {
-            background: #e7f3ff;
-            color: #0066cc;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: 500;
-        }
-        
-        .footer {
-            text-align: center;
-            padding: 20px;
-            color: #6c757d;
-            font-size: 0.9em;
-            border-top: 1px solid #e9ecef;
-        }
-        
-        .no-results {
-            text-align: center;
-            padding: 60px 20px;
-            color: #6c757d;
-        }
-        
-        .no-results-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎯 Job Matches</h1>
-            <p>Results from your job board search</p>
-        </div>
-""")
+        # Group existing matches by company
+        existing_by_company = {}
+        for match in existing_matches:
+            if match.company not in existing_by_company:
+                existing_by_company[match.company] = []
+            existing_by_company[match.company].append(match)
+        context['existing_by_company'] = existing_by_company
     
-    if not matches:
-        html_parts.append("""
-        <div class="no-results">
-            <div class="no-results-icon">🔍</div>
-            <h2>No matching jobs found</h2>
-            <p>Try adjusting your keywords or adding more companies to search.</p>
-        </div>
-""")
-    else:
-        # Stats section
-        if new_matches is not None and existing_matches is not None:
-            html_parts.append(f"""
-        <div class="stats">
-            <div class="stat">
-                <div class="stat-number">{len(matches)}</div>
-                <div class="stat-label">Total Matches</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">🆕 {len(new_matches)}</div>
-                <div class="stat-label">New</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">📋 {len(existing_matches)}</div>
-                <div class="stat-label">Previously Found</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{datetime.now().strftime('%B %d, %Y')}</div>
-                <div class="stat-label">Search Date</div>
-            </div>
-        </div>
-        
-        <div class="content">
-""")
-        else:
-            html_parts.append(f"""
-        <div class="stats">
-            <div class="stat">
-                <div class="stat-number">{len(matches)}</div>
-                <div class="stat-label">Total Matches</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{len(by_company)}</div>
-                <div class="stat-label">Companies</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{datetime.now().strftime('%B %d, %Y')}</div>
-                <div class="stat-label">Search Date</div>
-            </div>
-        </div>
-        
-        <div class="content">
-""")
-        
-        # Generate sections based on whether we have new/existing split
-        if new_matches is not None and existing_matches is not None:
-            # NEW MATCHES SECTION
-            if new_matches:
-                html_parts.append("""
-            <h2 style="color: #667eea; margin: 30px 0 20px 0; padding-left: 20px;">🆕 New Matches</h2>
-""")
-                new_by_company = {}
-                for match in new_matches:
-                    if match.company not in new_by_company:
-                        new_by_company[match.company] = []
-                    new_by_company[match.company].append(match)
-                
-                for company in sorted(new_by_company.keys()):
-                    jobs = new_by_company[company]
-                    html_parts.append(f"""
-            <div class="company-section">
-                <div class="company-header">
-                    <span class="company-name">{company}</span>
-                    <span class="company-count">{len(jobs)} match{'es' if len(jobs) != 1 else ''}</span>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Job Title</th>
-                            <th>Matched Keywords</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-""")
-                    
-                    for job in jobs:
-                        keywords_html = ''.join([f'<span class="keyword">{kw}</span>' for kw in job.matched_keywords])
-                        html_parts.append(f"""
-                        <tr>
-                            <td><a href="{job.url}" target="_blank" class="job-link">{job.title}</a></td>
-                            <td><div class="keywords">{keywords_html}</div></td>
-                        </tr>
-""")
-                    
-                    html_parts.append("""
-                    </tbody>
-                </table>
-            </div>
-""")
-            
-            # EXISTING MATCHES SECTION
-            if existing_matches:
-                html_parts.append("""
-            <h2 style="color: #6c757d; margin: 40px 0 20px 0; padding-left: 20px;">📋 Previously Found Matches</h2>
-""")
-                existing_by_company = {}
-                for match in existing_matches:
-                    if match.company not in existing_by_company:
-                        existing_by_company[match.company] = []
-                    existing_by_company[match.company].append(match)
-                
-                for company in sorted(existing_by_company.keys()):
-                    jobs = existing_by_company[company]
-                    html_parts.append(f"""
-            <div class="company-section">
-                <div class="company-header">
-                    <span class="company-name">{company}</span>
-                    <span class="company-count">{len(jobs)} match{'es' if len(jobs) != 1 else ''}</span>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Job Title</th>
-                            <th>Matched Keywords</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-""")
-                    
-                    for job in jobs:
-                        keywords_html = ''.join([f'<span class="keyword">{kw}</span>' for kw in job.matched_keywords])
-                        html_parts.append(f"""
-                        <tr>
-                            <td><a href="{job.url}" target="_blank" class="job-link">{job.title}</a></td>
-                            <td><div class="keywords">{keywords_html}</div></td>
-                        </tr>
-""")
-                    
-                    html_parts.append("""
-                    </tbody>
-                </table>
-            </div>
-""")
-        else:
-            # Original behavior - no split
-            for company in sorted(by_company.keys()):
-                jobs = by_company[company]
-                html_parts.append(f"""
-            <div class="company-section">
-                <div class="company-header">
-                    <span class="company-name">{company}</span>
-                    <span class="company-count">{len(jobs)} match{'es' if len(jobs) != 1 else ''}</span>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Job Title</th>
-                            <th>Matched Keywords</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-""")
-                
-                for job in jobs:
-                    keywords_html = ''.join([f'<span class="keyword">{kw}</span>' for kw in job.matched_keywords])
-                    html_parts.append(f"""
-                        <tr>
-                            <td><a href="{job.url}" target="_blank" class="job-link">{job.title}</a></td>
-                            <td><div class="keywords">{keywords_html}</div></td>
-                        </tr>
-""")
-                
-                html_parts.append("""
-                    </tbody>
-                </table>
-            </div>
-""")
-        
-        html_parts.append("        </div>")
+    # Setup Jinja2 environment
+    template_dir = Path(__file__).parent / 'templates'
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template('job_matches.html')
     
-    # Footer
-    html_parts.append(f"""
-        <div class="footer">
-            Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
-        </div>
-    </div>
-</body>
-</html>
-""")
+    # Render template
+    html_content = template.render(**context)
     
     # Write to file
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(html_parts))
+        f.write(html_content)
 
 
 def output_results(matches: List[JobMatch], html_file: str = "job_matches.html") -> None:

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Matches</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .stats {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 10px 20px;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .company-section {
+            margin-bottom: 40px;
+        }
+        
+        .company-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .company-name {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .company-count {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        tbody tr {
+            transition: background-color 0.2s ease;
+        }
+        
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .job-title {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .job-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+        
+        .job-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+        
+        .keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .keyword {
+            background: #e7f3ff;
+            color: #0066cc;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-size: 0.9em;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .no-results-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Job Matches</h1>
+            <p>Results from your job board search</p>
+        </div>
+
+        {% if not matches %}
+        <div class="no-results">
+            <div class="no-results-icon">🔍</div>
+            <h2>No matching jobs found</h2>
+            <p>Try adjusting your keywords or adding more companies to search.</p>
+        </div>
+        {% else %}
+        {# Stats section #}
+        {% if has_split_matches %}
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">{{ matches|length }}</div>
+                <div class="stat-label">Total Matches</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">🆕 {{ new_matches|length }}</div>
+                <div class="stat-label">New</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">📋 {{ existing_matches|length }}</div>
+                <div class="stat-label">Previously Found</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">{{ current_date }}</div>
+                <div class="stat-label">Search Date</div>
+            </div>
+        </div>
+        {% else %}
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">{{ matches|length }}</div>
+                <div class="stat-label">Total Matches</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">{{ by_company|length }}</div>
+                <div class="stat-label">Companies</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">{{ current_date }}</div>
+                <div class="stat-label">Search Date</div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="content">
+            {% if has_split_matches %}
+                {# NEW MATCHES SECTION #}
+                {% if new_matches %}
+                <h2 style="color: #667eea; margin: 30px 0 20px 0; padding-left: 20px;">🆕 New Matches</h2>
+                {% for company, jobs in new_by_company.items()|sort %}
+                <div class="company-section">
+                    <div class="company-header">
+                        <span class="company-name">{{ company }}</span>
+                        <span class="company-count">{{ jobs|length }} match{{ 'es' if jobs|length != 1 else '' }}</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job Title</th>
+                                <th>Matched Keywords</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in jobs %}
+                            <tr>
+                                <td><a href="{{ job.url }}" target="_blank" class="job-link">{{ job.title }}</a></td>
+                                <td>
+                                    <div class="keywords">
+                                        {% for kw in job.matched_keywords %}
+                                        <span class="keyword">{{ kw }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+                {% endif %}
+                
+                {# EXISTING MATCHES SECTION #}
+                {% if existing_matches %}
+                <h2 style="color: #6c757d; margin: 40px 0 20px 0; padding-left: 20px;">📋 Previously Found Matches</h2>
+                {% for company, jobs in existing_by_company.items()|sort %}
+                <div class="company-section">
+                    <div class="company-header">
+                        <span class="company-name">{{ company }}</span>
+                        <span class="company-count">{{ jobs|length }} match{{ 'es' if jobs|length != 1 else '' }}</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job Title</th>
+                                <th>Matched Keywords</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in jobs %}
+                            <tr>
+                                <td><a href="{{ job.url }}" target="_blank" class="job-link">{{ job.title }}</a></td>
+                                <td>
+                                    <div class="keywords">
+                                        {% for kw in job.matched_keywords %}
+                                        <span class="keyword">{{ kw }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+                {% endif %}
+            {% else %}
+                {# Original behavior - no split #}
+                {% for company, jobs in by_company.items()|sort %}
+                <div class="company-section">
+                    <div class="company-header">
+                        <span class="company-name">{{ company }}</span>
+                        <span class="company-count">{{ jobs|length }} match{{ 'es' if jobs|length != 1 else '' }}</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job Title</th>
+                                <th>Matched Keywords</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in jobs %}
+                            <tr>
+                                <td><a href="{{ job.url }}" target="_blank" class="job-link">{{ job.title }}</a></td>
+                                <td>
+                                    <div class="keywords">
+                                        {% for kw in job.matched_keywords %}
+                                        <span class="keyword">{{ kw }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            Generated on {{ generation_time }}
+        </div>
+    </div>
+</body>
+</html>
+

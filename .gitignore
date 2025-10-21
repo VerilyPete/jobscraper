@@ -43,6 +43,7 @@ job_matches.html
 *.html
 !tests/fixtures/*.html
 !tests/fixtures/jobs/*.html
+!templates/*.html
 
 # uv
 .uv/
